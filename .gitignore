@@ -1,0 +1,58 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Build and distribution files (Node and Python)
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs and databases
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+sqlite.db
+*.sqlite
+
+# Environment variables / Local configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.sync.profile.json
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Database storage folders
+postgres_data/

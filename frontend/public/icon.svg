@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+  </defs>
+  <!-- Background Rounded Rect -->
+  <rect width="512" height="512" rx="128" fill="#0f172a" />
+  <!-- Book Icon Overlay -->
+  <g transform="translate(128, 128) scale(1) translate(0, 0)" fill="url(#grad)">
+    <path d="M213.3 0c-43.1 0-77.9 31.8-77.9 71.1H0v142.2h116.8c10.4 47.9 56.4 85.3 112 85.3s101.6-37.4 112-85.3H457.6V71.1H321.3c0-39.3-34.9-71.1-78-71.1h-30zm0 42.7h30c18 0 32.5 12.8 32.5 28.4v42.7H180.8V71.1c0-15.6 14.5-28.4 32.5-28.4z" transform="scale(0.56) translate(100, 100)"/>
+    <!-- Clean modern lines -->
+    <path d="M96 160h320v32H96z" opacity="0.9" />
+    <path d="M96 224h320v32H96z" opacity="0.8" />
+    <path d="M96 288h224v32H96z" opacity="0.7" />
+  </g>
+</svg>
