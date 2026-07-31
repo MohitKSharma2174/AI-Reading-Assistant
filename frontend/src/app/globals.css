@@ -68,9 +68,18 @@ mark {
   to { transform: translateX(0); }
 }
 
+/* scaleUp for modals/dropdowns that have no inline transform */
 @keyframes scaleUp {
   from { opacity: 0; transform: scale(0.96) translateX(-50%); }
   to { opacity: 1; transform: scale(1) translateX(-50%); }
+}
+
+/* tooltipAppear: animates only opacity/scale WITHOUT touching translateX.
+   This preserves the inline `transform: translateX(-50%)` on the tooltip
+   element so it never flickers off-centre during the animation. */
+@keyframes tooltipAppear {
+  from { opacity: 0; scale: 0.92; }
+  to   { opacity: 1; scale: 1; }
 }
 
 .animate-fadeIn {
@@ -81,6 +90,12 @@ mark {
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Used only on centred modals (they have no conflicting inline translateX) */
 .animate-scaleUp {
   animation: scaleUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Used on the text-selection tooltip which has inline translateX(-50%) */
+.animate-tooltipAppear {
+  animation: tooltipAppear 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

@@ -27,7 +27,7 @@ class Article(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    original_url = Column(String, nullable=False)
+    original_url = Column(String, unique=True, nullable=False)
     title = Column(String, nullable=False)
     clean_content = Column(String, nullable=False)
     reading_time = Column(Integer, nullable=True)

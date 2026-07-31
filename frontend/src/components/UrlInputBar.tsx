@@ -10,8 +10,9 @@ interface UrlInputBarProps {
 
 export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
   const [url, setUrl] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'duplicate' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [resultTitle, setResultTitle] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,19 +29,25 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
 
     setStatus('loading');
     setErrorMessage('');
+    setResultTitle('');
 
     try {
-      await ingestArticle(url.trim());
-      setStatus('success');
+      const result = await ingestArticle(url.trim());
+      setResultTitle(result.title || '');
+      if (result.already_existed) {
+        setStatus('duplicate');
+      } else {
+        setStatus('success');
+      }
       setUrl('');
       setTimeout(() => {
         setStatus('idle');
-        if (onIngestSuccess) {
+        if (!result.already_existed && onIngestSuccess) {
           onIngestSuccess();
-        } else {
+        } else if (!result.already_existed) {
           window.location.reload();
         }
-      }, 1500);
+      }, 2200);
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err.message || 'Failed to ingest URL.');
@@ -48,7 +55,7 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto">
+    <div className="flex flex-col w-full">
       <form onSubmit={handleSubmit} className="relative flex items-center w-full border-b border-slate-700/30 hover:border-slate-500/50 focus-within:border-indigo-500 transition-colors duration-200">
         <div className="absolute left-0 text-slate-500">
           <Link className="w-4 h-4" />
@@ -85,7 +92,6 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
         </button>
       </form>
 
-      {/* Dynamic Feedback Display */}
       {status === 'error' && (
         <div className="mt-2 mx-1 flex items-start gap-2 px-3 py-2 bg-red-950/20 border border-red-900/30 rounded-xl text-red-300 text-xs animate-fadeIn">
           <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
@@ -96,7 +102,16 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
       {status === 'success' && (
         <div className="mt-2 mx-1 flex items-center gap-2 px-3 py-2 bg-emerald-950/20 border border-emerald-900/30 rounded-xl text-emerald-300 text-xs animate-fadeIn">
           <Check className="w-4 h-4 shrink-0 text-emerald-400" />
-          <span>AI summary processing in background.</span>
+          <span>Saved! AI summary processing in background.</span>
+        </div>
+      )}
+
+      {status === 'duplicate' && (
+        <div className="mt-2 mx-1 flex items-start gap-2 px-3 py-2 bg-amber-950/20 border border-amber-800/30 rounded-xl text-amber-300 text-xs animate-fadeIn">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+          <span>
+            Already in your library{resultTitle ? `: "${resultTitle.slice(0, 50)}${resultTitle.length > 50 ? '…' : ''}"` : '.'}
+          </span>
         </div>
       )}
     </div>

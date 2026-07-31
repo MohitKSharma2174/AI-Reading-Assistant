@@ -18,12 +18,24 @@ class TagResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ArticleResponse(BaseModel):
+    """Full article response (kept for backward-compat, includes content)."""
     id: int
     original_url: str
     title: str
     clean_content: str
     reading_time: Optional[int] = None
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ArticleIngestResponse(BaseModel):
+    """Lean response returned on POST /ingest — omits clean_content to reduce bandwidth."""
+    id: int
+    original_url: str
+    title: str
+    reading_time: Optional[int] = None
+    created_at: datetime
+    already_existed: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,3 +80,23 @@ class HighlightResponse(BaseModel):
     color: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AskRequest(BaseModel):
+    question: str
+    context: Optional[str] = None  # The highlighted/selected text passage
+
+
+class AskResponse(BaseModel):
+    answer: str
+    article_id: int
+
+
+class SummarizePassageRequest(BaseModel):
+    context: str  # The highlighted/selected passage to summarize
+
+
+class SummarizePassageResponse(BaseModel):
+    summary: str
+    article_id: int
+

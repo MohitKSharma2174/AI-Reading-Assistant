@@ -19,6 +19,7 @@ export interface Article {
   created_at: string;
   summary: Summary | null;
   tags: Tag[];
+  already_existed?: boolean; // returned on duplicate ingest
 }
 
 export async function ingestArticle(url: string): Promise<Article> {
@@ -135,3 +136,69 @@ export async function deleteHighlight(highlightId: number): Promise<{ message: s
 
   return response.json();
 }
+
+export interface AskAIRequest {
+  question: string;
+  context?: string; // highlighted text passage
+}
+
+export interface AskAIResponse {
+  answer: string;
+  article_id: number;
+}
+
+export async function askArticleAI(
+  articleId: number,
+  data: AskAIRequest
+): Promise<AskAIResponse> {
+  const response = await fetch(`${API_BASE_URL}/articles/${articleId}/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'AI query failed';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
+
+export interface SummarizePassageRequest {
+  context: string; // highlighted text passage
+}
+
+export interface SummarizePassageResponse {
+  summary: string;
+  article_id: number;
+}
+
+export async function summarizePassageAI(
+  articleId: number,
+  data: SummarizePassageRequest
+): Promise<SummarizePassageResponse> {
+  const response = await fetch(`${API_BASE_URL}/articles/${articleId}/summarize_passage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Summarization failed';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
+

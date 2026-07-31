@@ -175,4 +175,61 @@ def process_article_task(article_id: int):
         db.rollback()
         print(f"Background task: Failed to process Article {article_id}: {e}")
     finally:
+        # ALWAYS close the session - prevents pool exhaustion if Groq API hangs
         db.close()
+
+
+def ask_ai(question: str, context: str | None, article_content: str) -> str:
+    """Answer a user question about an article passage using Groq LLM."""
+    if IS_MOCK:
+        return (
+            f"[Mock AI] Your question: '{question}'.\n\n"
+            "In mock mode the Groq API key is not configured. "
+            "Set GROQ_API_KEY in backend/.env to enable live AI answers."
+        )
+
+    # Build a focused prompt: use highlighted context when available, else article snippet
+    passage = context.strip() if context and context.strip() else article_content[:2000]
+
+    ask_prompt = PromptTemplate.from_template(
+        "You are Inkwell, a knowledgeable reading assistant. "
+        "A user is reading an article and has highlighted the following passage:\n\n"
+        "Passage:\n{passage}\n\n"
+        "The user asks: {question}\n\n"
+        "Provide a clear, concise, and insightful answer (2-4 sentences). "
+        "Explain the key concept in the passage that answers the question. "
+        "Do not repeat the question. Respond in plain prose."
+    )
+
+    try:
+        chain = ask_prompt | llm
+        response = chain.invoke({"passage": passage, "question": question})
+        return response.content.strip()
+    except Exception as e:
+        print(f"ask_ai failed: {e}")
+        raise e
+
+
+def summarize_passage(context: str) -> str:
+    """Generate a 1-2 sentence concise summary of a specific highlighted passage."""
+    if IS_MOCK:
+        cleaned = context.strip()
+        snippet = cleaned[:80] + ("..." if len(cleaned) > 80 else "")
+        return f"[Mock Summary] This passage highlights key arguments regarding: '{snippet}'."
+
+    summarize_prompt = PromptTemplate.from_template(
+        "You are Inkwell, an expert reading assistant. "
+        "Summarize the following highlighted text passage in exactly 1 to 2 clear, concise sentences. "
+        "Focus on the core argument or key takeaway. Output ONLY the summary text in plain prose without any bullet points or extra headers.\n\n"
+        "Passage:\n{context}\n\n"
+        "Summary:"
+    )
+
+    try:
+        chain = summarize_prompt | llm
+        response = chain.invoke({"context": context.strip()})
+        return response.content.strip()
+    except Exception as e:
+        print(f"summarize_passage failed: {e}")
+        raise e
+
