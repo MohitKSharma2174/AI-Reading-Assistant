@@ -1,8 +1,9 @@
+import os
 import re
 import math
 import httpx
 from bs4 import BeautifulSoup
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 def get_youtube_video_id(url: str) -> str | None:
     """Extract 11-character YouTube video ID from a URL."""
@@ -49,10 +50,16 @@ async def extract_youtube(url: str) -> dict:
     if not video_id:
         raise ValueError("Invalid YouTube URL")
 
+    # Note: To bypass YouTube IP bans on cloud servers, pass a proxies dictionary:
+    # proxies = {"http": "http://user:pass@ip:port", "https": "https://user:pass@ip:port"}
+    # transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
+
     # Fetch transcript
     try:
         transcript_list = YouTubeTranscriptApi().fetch(video_id)
         clean_content = clean_youtube_transcript(transcript_list)
+    except (TranscriptsDisabled, NoTranscriptFound) as e:
+        raise ValueError(f"Subtitles/transcripts are disabled or unavailable for YouTube video {video_id}.")
     except Exception as e:
         raise ValueError(f"Could not retrieve transcript for YouTube video {video_id}: {str(e)}")
 
@@ -66,23 +73,36 @@ async def extract_youtube(url: str) -> dict:
 
 async def extract_web(url: str) -> dict:
     """Fetch and parse content of a standard web page."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+    api_key = os.getenv("SCRAPER_API_KEY")
     
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            response.raise_for_status()
-            html = response.text
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 403:
-                raise ValueError(f"Access forbidden (403 Error) when fetching {url}. The site blocks web scrapers.")
-            raise ValueError(f"Failed to fetch webpage ({e.response.status_code}): {str(e)}")
-        except Exception as e:
-            raise ValueError(f"Failed to fetch webpage: {str(e)}")
+    if api_key:
+        # Route request through ScraperAPI to bypass 403 blocks & anti-bot protection
+        scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={httpx.URL(url)}"
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                response = await client.get(scraper_url, timeout=20.0)
+                response.raise_for_status()
+                html = response.text
+            except Exception as e:
+                raise ValueError(f"ScraperAPI failed to fetch webpage: {str(e)}")
+    else:
+        # Fallback to standard HTTP request with browser User-Agent
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+            try:
+                response = await client.get(url, timeout=10.0)
+                response.raise_for_status()
+                html = response.text
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise ValueError(f"Access forbidden (403 Error) when fetching {url}. Set SCRAPER_API_KEY in backend/.env to bypass cloud IP blocks.")
+                raise ValueError(f"Failed to fetch webpage ({e.response.status_code}): {str(e)}")
+            except Exception as e:
+                raise ValueError(f"Failed to fetch webpage: {str(e)}")
 
     title = ""
     clean_content = ""
