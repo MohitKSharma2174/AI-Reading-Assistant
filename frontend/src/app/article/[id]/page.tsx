@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Clock, Tag as TagIcon, Sparkles, BookOpen, AlertCircle, 
-  RefreshCw, MessageSquare, Trash2, X, Library, BookMarked, User, Plus, 
-  Globe, MessageCircle, Send, Check 
+  RefreshCw, MessageSquare, Trash2, X, Library, BookMarked, User as UserIcon, Plus, 
+  Globe, MessageCircle, Send, Check, LogOut 
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { 
   getArticle, getHighlights, createHighlight, deleteHighlight, askArticleAI, summarizePassageAI,
   Article, Highlight 
@@ -15,10 +16,13 @@ import {
 import TypographyToolbar, { TypographyConfig } from '../../../components/TypographyToolbar';
 import UrlInputBar from '../../../components/UrlInputBar';
 import { useTheme } from '../../../lib/ThemeContext';
+import { useAuth } from '../../../context/AuthContext';
 
 export default function ReaderPage() {
   const params = useParams();
+  const router = useRouter();
   const { theme } = useTheme();
+  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
   
   const idStr = params.id as string;
   const id = parseInt(idStr, 10);
@@ -75,14 +79,23 @@ export default function ReaderPage() {
     }
   };
 
+  // Protect Route: Redirect to /login if unauthenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, authLoading, router]);
+
   useEffect(() => {
     if (isNaN(id)) {
       setError('Invalid ID');
       setLoading(false);
       return;
     }
-    fetchArticleDetails();
-  }, [id]);
+    if (isAuthenticated) {
+      fetchArticleDetails();
+    }
+  }, [id, isAuthenticated]);
 
   // Selection Handler (Viewport-relative fixed positioning)
   const handleSelection = () => {
@@ -364,19 +377,28 @@ export default function ReaderPage() {
           </div>
         </div>
 
-        {/* Bottom User Profile Section */}
-        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
-            <User className="w-4.5 h-4.5" />
+        {/* Bottom User Profile & Logout Section */}
+        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
+              <UserIcon className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-bold text-xs text-foreground truncate">
+                {user ? user.email.split('@')[0] : 'System Reader'}
+              </span>
+              <span className="text-[9px] text-foreground/45 truncate">
+                {user ? user.email : 'Online'}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-bold text-xs text-foreground truncate">
-              System Reader
-            </span>
-            <span className="text-[9px] text-foreground/45 truncate">
-              ID: 0001 • Online
-            </span>
-          </div>
+          <button
+            onClick={logout}
+            className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+            title="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 

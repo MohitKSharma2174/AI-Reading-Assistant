@@ -1,5 +1,33 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+export const getToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('inkwell_token');
+};
+
+export const setToken = (token: string): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('inkwell_token', token);
+  }
+};
+
+export const removeToken = (): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('inkwell_token');
+  }
+};
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+export interface User {
+  id: number;
+  email: string;
+  created_at: string;
+}
+
 export interface Tag {
   id: number;
   name: string;
@@ -19,14 +47,87 @@ export interface Article {
   created_at: string;
   summary: Summary | null;
   tags: Tag[];
-  already_existed?: boolean; // returned on duplicate ingest
+  already_existed?: boolean;
 }
+
+/* AUTH API CALLS */
+
+export async function signup(email: string, password: string): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Signup failed';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
+
+export async function login(email: string, password: string): Promise<{ access_token: string; token_type: string }> {
+  const bodyParams = new URLSearchParams({
+    username: email,
+    password: password,
+  });
+
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: bodyParams,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Login failed';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  const data = await response.json();
+  if (data.access_token) {
+    setToken(data.access_token);
+  }
+  return data;
+}
+
+export async function getCurrentUser(): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: 'GET',
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to authenticate session');
+  }
+
+  return response.json();
+}
+
+/* ARTICLES API CALLS */
 
 export async function ingestArticle(url: string): Promise<Article> {
   const response = await fetch(`${API_BASE_URL}/articles/ingest`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ url }),
   });
@@ -50,7 +151,12 @@ export async function getArticles(tag?: string): Promise<Article[]> {
     url += `?tag=${encodeURIComponent(tag)}`;
   }
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
   if (!response.ok) {
     throw new Error('Failed to fetch articles');
   }
@@ -59,7 +165,12 @@ export async function getArticles(tag?: string): Promise<Article[]> {
 }
 
 export async function getArticle(id: number): Promise<Article> {
-  const response = await fetch(`${API_BASE_URL}/articles/${id}`);
+  const response = await fetch(`${API_BASE_URL}/articles/${id}`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error('Article not found');
@@ -73,6 +184,9 @@ export async function getArticle(id: number): Promise<Article> {
 export async function deleteArticle(id: number): Promise<{ message: string }> {
   const response = await fetch(`${API_BASE_URL}/articles/${id}`, {
     method: 'DELETE',
+    headers: {
+      ...getAuthHeaders(),
+    },
   });
 
   if (!response.ok) {
@@ -81,6 +195,8 @@ export async function deleteArticle(id: number): Promise<{ message: string }> {
 
   return response.json();
 }
+
+/* HIGHLIGHTS API CALLS */
 
 export interface Highlight {
   id: number;
@@ -105,6 +221,7 @@ export async function createHighlight(articleId: number, data: HighlightCreate):
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(data),
   });
@@ -117,7 +234,12 @@ export async function createHighlight(articleId: number, data: HighlightCreate):
 }
 
 export async function getHighlights(articleId: number): Promise<Highlight[]> {
-  const response = await fetch(`${API_BASE_URL}/articles/${articleId}/highlights`);
+  const response = await fetch(`${API_BASE_URL}/articles/${articleId}/highlights`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
   if (!response.ok) {
     throw new Error('Failed to fetch highlights');
   }
@@ -128,6 +250,9 @@ export async function getHighlights(articleId: number): Promise<Highlight[]> {
 export async function deleteHighlight(highlightId: number): Promise<{ message: string }> {
   const response = await fetch(`${API_BASE_URL}/highlights/${highlightId}`, {
     method: 'DELETE',
+    headers: {
+      ...getAuthHeaders(),
+    },
   });
 
   if (!response.ok) {
@@ -137,9 +262,11 @@ export async function deleteHighlight(highlightId: number): Promise<{ message: s
   return response.json();
 }
 
+/* AI API CALLS */
+
 export interface AskAIRequest {
   question: string;
-  context?: string; // highlighted text passage
+  context?: string;
 }
 
 export interface AskAIResponse {
@@ -153,7 +280,10 @@ export async function askArticleAI(
 ): Promise<AskAIResponse> {
   const response = await fetch(`${API_BASE_URL}/articles/${articleId}/ask`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(data),
   });
 
@@ -171,7 +301,7 @@ export async function askArticleAI(
 }
 
 export interface SummarizePassageRequest {
-  context: string; // highlighted text passage
+  context: string;
 }
 
 export interface SummarizePassageResponse {
@@ -185,7 +315,10 @@ export async function summarizePassageAI(
 ): Promise<SummarizePassageResponse> {
   const response = await fetch(`${API_BASE_URL}/articles/${articleId}/summarize_passage`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(data),
   });
 
@@ -201,4 +334,3 @@ export async function summarizePassageAI(
 
   return response.json();
 }
-

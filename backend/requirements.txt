@@ -10,3 +10,7 @@ httpx
 youtube-transcript-api
 langchain
 langchain-groq
+passlib[bcrypt]
+PyJWT
+python-multipart
+bcrypt

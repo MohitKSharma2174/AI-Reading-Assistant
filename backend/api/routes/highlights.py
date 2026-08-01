@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from core.database import get_db
-from models.schema import Article, Highlight
+from core.deps import get_current_user
+from models.schema import User, Article, Highlight
 from models.schemas import HighlightCreate, HighlightResponse
 from typing import List
 
@@ -10,9 +11,18 @@ router = APIRouter(
 )
 
 @router.post("/articles/{article_id}/highlights", response_model=HighlightResponse, status_code=status.HTTP_201_CREATED)
-async def create_highlight(article_id: int, request: HighlightCreate, db: Session = Depends(get_db)):
-    """Create a text highlight and optional note linked to an article."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+async def create_highlight(
+    article_id: int,
+    request: HighlightCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a text highlight and optional note linked to an article accessible to current_user."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -42,9 +52,17 @@ async def create_highlight(article_id: int, request: HighlightCreate, db: Sessio
     return db_highlight
 
 @router.get("/articles/{article_id}/highlights", response_model=List[HighlightResponse])
-async def get_highlights(article_id: int, db: Session = Depends(get_db)):
-    """Fetch all highlights and notes for a specific article."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+async def get_highlights(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch all highlights and notes for a specific article accessible to current_user."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -55,7 +73,11 @@ async def get_highlights(article_id: int, db: Session = Depends(get_db)):
     return highlights
 
 @router.delete("/highlights/{highlight_id}", status_code=status.HTTP_200_OK)
-async def delete_highlight(highlight_id: int, db: Session = Depends(get_db)):
+async def delete_highlight(
+    highlight_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Delete a highlight by ID."""
     highlight = db.query(Highlight).filter(Highlight.id == highlight_id).first()
     if not highlight:

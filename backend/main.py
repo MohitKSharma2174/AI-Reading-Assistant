@@ -2,11 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes.articles import router as articles_router
 from api.routes.highlights import router as highlights_router
+from api.routes.auth import router as auth_router
 
 app = FastAPI(
-    title="FastAPI Backend",
-    description="Clean FastAPI application template for monorepo",
-    version="0.1.0"
+    title="Inkwell AI Reader Backend API",
+    description="FastAPI Backend with JWT Authentication and Groq LLM Services",
+    version="0.2.0"
 )
 
 # CORS middleware configuration
@@ -19,12 +20,13 @@ app.add_middleware(
 )
 
 # Include Routers
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(articles_router, prefix="/api/v1")
 app.include_router(highlights_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the FastAPI Backend API"}
+    return {"message": "Welcome to the Inkwell AI Reader Backend API"}
 
 @app.get("/health")
 async def health_check():

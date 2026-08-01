@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 import { ThemeProvider } from "../lib/ThemeContext";
+import { AuthProvider } from "../context/AuthContext";
 
 export const viewport: Viewport = {
   themeColor: "#0f172a",
@@ -40,7 +41,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ThemeProvider>
         
         {/* Service Worker Setup: Register in production, unregister/cleanup in development */}

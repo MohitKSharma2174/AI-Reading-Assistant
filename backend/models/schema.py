@@ -17,6 +17,15 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     preferences = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    @property
+    def hashed_password(self) -> str:
+        return self.password_hash
+
+    @hashed_password.setter
+    def hashed_password(self, value: str):
+        self.password_hash = value
 
     # Relationships
     articles = relationship("Article", back_populates="user", cascade="all, delete-orphan")
@@ -26,7 +35,7 @@ class Article(Base):
     __tablename__ = "articles"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     original_url = Column(String, unique=True, nullable=False)
     title = Column(String, nullable=False)
     clean_content = Column(String, nullable=False)

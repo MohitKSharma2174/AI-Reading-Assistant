@@ -4,14 +4,19 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
-  ChevronRight, Plus, Library, Sparkles, BookMarked, User, X, Globe, BarChart2 
+  ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut 
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { getArticles, deleteArticle, Article } from '../lib/api';
 import UrlInputBar from '../components/UrlInputBar';
 import { useTheme } from '../lib/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function LibraryPage() {
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+
   const [articles, setArticles] = useState<Article[]>([]);
   const [tagsList, setTagsList] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -20,6 +25,13 @@ export default function LibraryPage() {
   
   // Ingest Modal state
   const [isIngestOpen, setIsIngestOpen] = useState(false);
+
+  // Protect Route: Redirect to /login if unauthenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, authLoading, router]);
 
   const fetchArticlesData = async (tagFilter: string | null = null) => {
     setLoading(true);
@@ -150,19 +162,28 @@ export default function LibraryPage() {
           </div>
         </div>
 
-        {/* Bottom User Profile Section */}
-        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
-            <User className="w-4.5 h-4.5" />
+        {/* Bottom User Profile & Logout Section */}
+        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
+              <UserIcon className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-bold text-xs text-foreground truncate">
+                {user ? user.email.split('@')[0] : 'System Reader'}
+              </span>
+              <span className="text-[9px] text-foreground/45 truncate">
+                {user ? user.email : 'Online'}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-bold text-xs text-foreground truncate">
-              System Reader
-            </span>
-            <span className="text-[9px] text-foreground/45 truncate">
-              ID: 0001 • Online
-            </span>
-          </div>
+          <button
+            onClick={logout}
+            className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+            title="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 

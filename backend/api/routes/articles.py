@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from core.database import get_db
+from core.deps import get_current_user
 from models.schema import User, Article, Tag
 from models.schemas import (
     ArticleIngestRequest, ArticleIngestResponse,
@@ -18,38 +19,24 @@ router = APIRouter(
     tags=["articles"]
 )
 
-def get_or_create_system_user(db: Session) -> User:
-    """Ensure a default system user exists for mapping ingested articles."""
-    system_user = db.query(User).filter(User.id == 1).first()
-    if not system_user:
-        system_user = User(
-            id=1,
-            email="system@aireader.local",
-            password_hash="system_default_hash",
-            preferences={}
-        )
-        db.add(system_user)
-        try:
-            db.commit()
-            db.refresh(system_user)
-        except Exception:
-            db.rollback()
-            # If already created in a concurrent request, fetch again
-            system_user = db.query(User).filter(User.id == 1).first()
-    return system_user
 
 @router.post("/ingest", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)
-async def ingest_article(request: ArticleIngestRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Ingest a URL: check for duplicates first, then extract, save, and enqueue AI processing."""
+async def ingest_article(
+    request: ArticleIngestRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Ingest a URL: check for duplicates for current_user first, then extract, save, and enqueue AI processing."""
     url_str = str(request.url)
 
-    # Ensure system user exists
-    get_or_create_system_user(db)
+    # --- 1. Duplicate check: return existing article if URL already ingested by current_user ---
+    existing = db.query(Article).filter(
+        Article.original_url == url_str,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
 
-    # --- 1. Duplicate check: return existing article if URL already ingested ---
-    existing = db.query(Article).filter(Article.original_url == url_str).first()
     if existing:
-        # Return lean response with flag so frontend can show "already saved" UI
         return ArticleIngestResponse(
             id=existing.id,
             original_url=existing.original_url,
@@ -70,9 +57,9 @@ async def ingest_article(request: ArticleIngestRequest, background_tasks: Backgr
             detail=f"An error occurred during extraction: {str(e)}"
         )
 
-    # --- 3. Persist to database ---
+    # --- 3. Persist to database bound to current_user.id ---
     db_article = Article(
-        user_id=1,
+        user_id=current_user.id,
         original_url=url_str,
         title=extracted["title"],
         clean_content=extracted["clean_content"],
@@ -85,7 +72,7 @@ async def ingest_article(request: ArticleIngestRequest, background_tasks: Backgr
         db.refresh(db_article)
     except IntegrityError:
         db.rollback()
-        # Race condition: another request inserted the same URL between our check and commit
+        # Race condition fallback
         existing = db.query(Article).filter(Article.original_url == url_str).first()
         if existing:
             return ArticleIngestResponse(
@@ -119,10 +106,17 @@ async def ingest_article(request: ArticleIngestRequest, background_tasks: Backgr
         already_existed=False,
     )
 
+
 @router.get("/", response_model=List[ArticleListResponse])
-async def get_articles(tag: Optional[str] = None, db: Session = Depends(get_db)):
-    """Retrieve all articles for system user (ID: 1), optionally filtered by tag, ordered by created_at desc."""
-    query = db.query(Article).filter(Article.user_id == 1)
+async def get_articles(
+    tag: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve all articles accessible to current_user (owned or system/public), optionally filtered by tag."""
+    query = db.query(Article).filter(
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    )
     
     if tag:
         tag_lower = tag.strip().lower()
@@ -131,10 +125,19 @@ async def get_articles(tag: Optional[str] = None, db: Session = Depends(get_db))
     articles = query.order_by(Article.created_at.desc()).all()
     return articles
 
+
 @router.get("/{article_id}", response_model=ArticleDetailResponse)
-async def get_article(article_id: int, db: Session = Depends(get_db)):
-    """Retrieve a specific article by ID including full content, summary, and tags."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+async def get_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve a specific article by ID for current_user including full content, summary, and tags."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -142,10 +145,19 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
         )
     return article
 
+
 @router.delete("/{article_id}", status_code=status.HTTP_200_OK)
-async def delete_article(article_id: int, db: Session = Depends(get_db)):
-    """Remove an article from the library."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+async def delete_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Remove an article owned by current_user from the library."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -168,10 +180,15 @@ async def delete_article(article_id: int, db: Session = Depends(get_db)):
 async def ask_article_ai(
     article_id: int,
     body: AskRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Ask Inkwell AI a question about an article or a specific highlighted passage."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    """Ask Inkwell AI a question about an article owned by or accessible to current_user."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -203,10 +220,15 @@ async def ask_article_ai(
 async def summarize_article_passage(
     article_id: int,
     body: SummarizePassageRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Summarize a specific highlighted text passage from an article using Groq LLM."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    """Summarize a specific highlighted text passage from an article accessible to current_user using Groq LLM."""
+    article = db.query(Article).filter(
+        Article.id == article_id,
+        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
+    ).first()
+
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
