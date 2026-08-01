@@ -13,3 +13,7 @@ python-dotenv
 beautifulsoup4
 requests
 youtube-transcript-api
+langchain-core
+langchain
+langchain-community
+langchain-groq
