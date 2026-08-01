@@ -10,3 +10,5 @@ python-multipart
 groq
 pydantic
 python-dotenv
+beautifulsoup4
+requests
