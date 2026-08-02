@@ -30,11 +30,8 @@ async def ingest_article(
     """Ingest a URL: check for duplicates for current_user first, then extract, save, and enqueue AI processing."""
     url_str = str(request.url)
 
-    # --- 1. Duplicate check: return existing article if URL already ingested by current_user ---
-    existing = db.query(Article).filter(
-        Article.original_url == url_str,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    # --- 1. Duplicate check: return existing article if URL already ingested ---
+    existing = db.query(Article).filter(Article.original_url == url_str).first()
 
     if existing:
         return ArticleIngestResponse(
@@ -113,10 +110,8 @@ async def get_articles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve all articles accessible to current_user (owned or system/public), optionally filtered by tag."""
-    query = db.query(Article).filter(
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    )
+    """Retrieve all articles accessible to current_user, optionally filtered by tag."""
+    query = db.query(Article)
     
     if tag:
         tag_lower = tag.strip().lower()
@@ -133,10 +128,7 @@ async def get_article(
     current_user: User = Depends(get_current_user)
 ):
     """Retrieve a specific article by ID for current_user including full content, summary, and tags."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(
@@ -153,10 +145,7 @@ async def delete_article(
     current_user: User = Depends(get_current_user)
 ):
     """Remove an article owned by current_user from the library."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(
@@ -184,10 +173,7 @@ async def ask_article_ai(
     current_user: User = Depends(get_current_user)
 ):
     """Ask Inkwell AI a question about an article owned by or accessible to current_user."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(
@@ -224,10 +210,7 @@ async def summarize_article_passage(
     current_user: User = Depends(get_current_user)
 ):
     """Summarize a specific highlighted text passage from an article accessible to current_user using Groq LLM."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(

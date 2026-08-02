@@ -18,10 +18,7 @@ async def create_highlight(
     current_user: User = Depends(get_current_user)
 ):
     """Create a text highlight and optional note linked to an article accessible to current_user."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(
@@ -58,10 +55,7 @@ async def get_highlights(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch all highlights and notes for a specific article accessible to current_user."""
-    article = db.query(Article).filter(
-        Article.id == article_id,
-        (Article.user_id == current_user.id) | (Article.user_id == 1) | (Article.user_id.is_(None))
-    ).first()
+    article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:
         raise HTTPException(
