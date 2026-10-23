@@ -3,6 +3,7 @@ uvicorn[standard]
 sqlalchemy
 alembic
 psycopg2-binary
+psycopg[binary]
 passlib
 bcrypt==4.0.1
 PyJWT
@@ -12,6 +13,7 @@ pydantic
 python-dotenv
 beautifulsoup4
 requests
+httpx
 youtube-transcript-api
 langchain-core
 langchain
