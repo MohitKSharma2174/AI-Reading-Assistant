@@ -144,7 +144,7 @@ def process_article_task(article_id: int):
             tag_names = generate_tags(article.clean_content)
         except Exception as e:
             print(f"Error generating tags for article {article_id}: {e}")
-            tag_names = ["General", "AI Reader"]
+            tag_names = ["General", "AARC"]
 
         # Insert Summary
         summary_obj = Summary(
@@ -192,7 +192,7 @@ def ask_ai(question: str, context: str | None, article_content: str) -> str:
     passage = context.strip() if context and context.strip() else article_content[:2000]
 
     ask_prompt = PromptTemplate.from_template(
-        "You are Inkwell, a knowledgeable reading assistant. "
+        "You are AARC (Anything Anywhere Reading Companion), a knowledgeable reading assistant. "
         "A user is reading an article and has highlighted the following passage:\n\n"
         "Passage:\n{passage}\n\n"
         "The user asks: {question}\n\n"
@@ -218,7 +218,7 @@ def summarize_passage(context: str) -> str:
         return f"[Mock Summary] This passage highlights key arguments regarding: '{snippet}'."
 
     summarize_prompt = PromptTemplate.from_template(
-        "You are Inkwell, an expert reading assistant. "
+        "You are AARC (Anything Anywhere Reading Companion), an expert reading assistant. "
         "Summarize the following highlighted text passage in exactly 1 to 2 clear, concise sentences. "
         "Focus on the core argument or key takeaway. Output ONLY the summary text in plain prose without any bullet points or extra headers.\n\n"
         "Passage:\n{context}\n\n"

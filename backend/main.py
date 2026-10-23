@@ -5,8 +5,8 @@ from api.routes.highlights import router as highlights_router
 from api.routes.auth import router as auth_router
 
 app = FastAPI(
-    title="Inkwell AI Reader Backend API",
-    description="FastAPI Backend with JWT Authentication and Groq LLM Services",
+    title="AARC API",
+    description="Anything Anywhere Reading Companion API",
     version="0.2.0"
 )
 
@@ -26,7 +26,7 @@ app.include_router(highlights_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Inkwell AI Reader Backend API"}
+    return {"message": "Welcome to the AARC API"}
 
 @app.get("/health")
 async def health_check():

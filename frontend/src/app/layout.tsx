@@ -20,8 +20,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "AI Reading Assistant",
-  description: "Distraction-free offline reader with AI summaries and highlights.",
+  title: "AARC",
+  description: "Anything Anywhere Reading Companion",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",

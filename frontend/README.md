@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AARC (Anything Anywhere Reading Companion) - Frontend 📖🤖
+
+This is the Next.js frontend for **AARC (Anything Anywhere Reading Companion)**, bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 

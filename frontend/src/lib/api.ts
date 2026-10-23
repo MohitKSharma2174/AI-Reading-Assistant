@@ -2,17 +2,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('inkwell_token');
+  return localStorage.getItem('aarc_token') || localStorage.getItem('inkwell_token');
 };
 
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('inkwell_token', token);
+    localStorage.setItem('aarc_token', token);
   }
 };
 
 export const removeToken = (): void => {
   if (typeof window !== 'undefined') {
+    localStorage.removeItem('aarc_token');
     localStorage.removeItem('inkwell_token');
   }
 };

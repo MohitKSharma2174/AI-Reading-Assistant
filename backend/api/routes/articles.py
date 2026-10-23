@@ -172,7 +172,7 @@ async def ask_article_ai(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Ask Inkwell AI a question about an article owned by or accessible to current_user."""
+    """Ask AARC AI a question about an article owned by or accessible to current_user."""
     article = db.query(Article).filter(Article.id == article_id).first()
 
     if not article:

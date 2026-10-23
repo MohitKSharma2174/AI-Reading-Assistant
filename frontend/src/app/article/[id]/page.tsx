@@ -322,10 +322,10 @@ export default function ReaderPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
-                Inkwell
+                AARC
               </span>
               <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
-                AI Reading Hub
+                Reading Companion
               </span>
             </div>
           </Link>
@@ -716,7 +716,7 @@ export default function ReaderPage() {
 
             <h3 className="font-extrabold text-base text-slate-200 mb-4 flex items-center gap-2">
               <MessageCircle className="w-4.5 h-4.5 text-indigo-400" />
-              Ask Inkwell Assist AI
+              Ask AARC Assist AI
             </h3>
 
             <div className="space-y-4">
@@ -763,7 +763,7 @@ export default function ReaderPage() {
                 <div className="bg-indigo-950/20 border border-indigo-900/30 rounded-2xl p-4 space-y-3 animate-fadeIn">
                   <div className="flex items-center gap-1 text-[9px] font-bold text-indigo-400 uppercase tracking-widest">
                     <Sparkles className="w-3 h-3 fill-indigo-400/20" />
-                    Inkwell AI Answer
+                    AARC AI Answer
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
                     {aiAnswer}

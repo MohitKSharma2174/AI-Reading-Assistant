@@ -63,10 +63,10 @@ export default function LoginPage() {
           </div>
           <div className="flex flex-col">
             <span className="font-extrabold text-xl tracking-tight text-slate-100 leading-none">
-              Inkwell
+              AARC
             </span>
             <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mt-0.5">
-              AI Reading Assistant
+              Anything Anywhere Reading Companion
             </span>
           </div>
         </div>
@@ -86,13 +86,13 @@ export default function LoginPage() {
           </h1>
 
           <p className="text-slate-400 text-sm leading-relaxed font-normal">
-            Inkwell cleans cluttered web pages, builds distraction-free reader columns, and provides instant AI summaries and passage tutors.
+            AARC cleans cluttered web pages, builds distraction-free reader columns, and provides instant AI summaries and passage tutors.
           </p>
 
           {/* Testimonial card */}
           <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-2">
             <p className="text-xs italic text-slate-300 leading-relaxed">
-              "Inkwell transformed how I digest technical articles and research. The instant Groq passage tutor is invaluable."
+              "AARC transformed how I digest technical articles and research. The instant Groq passage tutor is invaluable."
             </p>
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
               — Editorial Reader Community
@@ -102,7 +102,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="z-10 text-xs text-slate-600 flex items-center justify-between border-t border-slate-850 pt-6">
-          <span>© 2026 Inkwell Inc.</span>
+          <span>© 2026 AARC</span>
           <span>Privacy & Terms</span>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function LoginPage() {
               <BookOpen className="w-4.5 h-4.5 text-slate-100" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-100">
-              Inkwell
+              AARC
             </span>
           </div>
 
@@ -158,7 +158,7 @@ export default function LoginPage() {
           {/* Form Header */}
           <div className="space-y-1">
             <h2 className="text-2xl font-extrabold text-slate-100 tracking-tight">
-              {mode === 'login' ? 'Welcome back' : 'Start reading smarter'}
+              {mode === 'login' ? 'Welcome to AARC' : 'Start reading smarter with AARC'}
             </h2>
             <p className="text-slate-400 text-xs">
               {mode === 'login' 

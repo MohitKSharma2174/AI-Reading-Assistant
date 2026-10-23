@@ -22,7 +22,7 @@ export default function Navbar({ onIngestSuccess }: NavbarProps) {
             </div>
             <div className="flex flex-col">
               <span className="font-extrabold text-foreground text-base tracking-tight transition-colors duration-200">
-                AI Reader
+                AARC
               </span>
               <span className="text-[9px] text-foreground/40 font-bold uppercase tracking-widest -mt-0.5">
                 Editorial

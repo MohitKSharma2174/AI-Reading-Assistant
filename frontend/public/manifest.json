@@ -1,6 +1,6 @@
 {
-  "name": "AI Reading Assistant",
-  "short_name": "AI Reader",
+  "name": "AARC - Anything Anywhere Reading Companion",
+  "short_name": "AARC",
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
   "display": "standalone",

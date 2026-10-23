@@ -95,10 +95,10 @@ export default function LibraryPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
-                Inkwell
+                AARC
               </span>
               <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
-                AI Reading Hub
+                Reading Companion
               </span>
             </div>
           </Link>
@@ -377,10 +377,10 @@ export default function LibraryPage() {
         <div className="bg-gradient-to-tr from-indigo-950/40 to-violet-950/20 border border-indigo-900/30 rounded-2xl p-5 space-y-2 text-slate-200 shadow-sm">
           <h4 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
-            Inkwell Assist
+            AARC Assist
           </h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Inkwell automatically parses details, fetches clean web/YouTube pages, strips trackers, and extracts main headings via Groq AI Llama-3.
+            AARC automatically parses details, fetches clean web/YouTube pages, strips trackers, and extracts main headings via Groq AI Llama-3.
           </p>
         </div>
       </aside>
