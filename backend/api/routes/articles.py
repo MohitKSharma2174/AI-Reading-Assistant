@@ -11,7 +11,14 @@ from models.schemas import (
     SummarizePassageRequest, SummarizePassageResponse,
 )
 from services.extractor import extract_content
-from services.ai_service import process_article_task, ask_ai, summarize_passage
+from services.llm_service import (
+    process_article_task,
+    ask_ai,
+    summarize_passage,
+    summarize_highlight,
+    TOKEN_LIMIT_FALLBACK,
+    is_token_or_rate_limit_error,
+)
 from typing import List, Optional
 
 router = APIRouter(
@@ -28,49 +35,12 @@ async def ingest_article(
     current_user: User = Depends(get_current_user)
 ):
     """Ingest a URL: check for duplicates for current_user first, then extract, save, and enqueue AI processing."""
-    url_str = str(request.url)
-
-    # --- 1. Duplicate check: return existing article if URL already ingested ---
-    existing = db.query(Article).filter(Article.original_url == url_str).first()
-
-    if existing:
-        return ArticleIngestResponse(
-            id=existing.id,
-            original_url=existing.original_url,
-            title=existing.title,
-            reading_time=existing.reading_time,
-            created_at=existing.created_at,
-            already_existed=True,
-        )
-
-    # --- 2. Content extraction ---
     try:
-        extracted = await extract_content(url_str)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred during extraction: {str(e)}"
-        )
+        url_str = str(request.url)
 
-    # --- 3. Persist to database bound to current_user.id ---
-    db_article = Article(
-        user_id=current_user.id,
-        original_url=url_str,
-        title=extracted["title"],
-        clean_content=extracted["clean_content"],
-        reading_time=extracted["reading_time"]
-    )
-
-    try:
-        db.add(db_article)
-        db.commit()
-        db.refresh(db_article)
-    except IntegrityError:
-        db.rollback()
-        # Race condition fallback
+        # --- 1. Duplicate check: return existing article if URL already ingested ---
         existing = db.query(Article).filter(Article.original_url == url_str).first()
+
         if existing:
             return ArticleIngestResponse(
                 id=existing.id,
@@ -80,28 +50,71 @@ async def ingest_article(
                 created_at=existing.created_at,
                 already_existed=True,
             )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save article due to a database conflict."
-        )
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save article to database: {str(e)}"
+
+        # --- 2. Content extraction ---
+        try:
+            extracted = await extract_content(url_str)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An error occurred during extraction: {str(e)}"
+            )
+
+        # --- 3. Persist to database bound to current_user.id ---
+        db_article = Article(
+            user_id=current_user.id,
+            original_url=url_str,
+            title=extracted["title"],
+            clean_content=extracted["clean_content"],
+            reading_time=extracted["reading_time"]
         )
 
-    # --- 4. Enqueue background AI summarization & tagging task ---
-    background_tasks.add_task(process_article_task, db_article.id)
+        try:
+            db.add(db_article)
+            db.commit()
+            db.refresh(db_article)
+        except IntegrityError:
+            db.rollback()
+            # Race condition fallback
+            existing = db.query(Article).filter(Article.original_url == url_str).first()
+            if existing:
+                return ArticleIngestResponse(
+                    id=existing.id,
+                    original_url=existing.original_url,
+                    title=existing.title,
+                    reading_time=existing.reading_time,
+                    created_at=existing.created_at,
+                    already_existed=True,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save article due to a database conflict."
+            )
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save article to database: {str(e)}"
+            )
 
-    return ArticleIngestResponse(
-        id=db_article.id,
-        original_url=db_article.original_url,
-        title=db_article.title,
-        reading_time=db_article.reading_time,
-        created_at=db_article.created_at,
-        already_existed=False,
-    )
+        # --- 4. Enqueue background AI summarization & tagging task ---
+        background_tasks.add_task(process_article_task, db_article.id)
+
+        return ArticleIngestResponse(
+            id=db_article.id,
+            original_url=db_article.original_url,
+            title=db_article.title,
+            reading_time=db_article.reading_time,
+            created_at=db_article.created_at,
+            already_existed=False,
+        )
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @router.get("/", response_model=List[ArticleListResponse])
@@ -145,24 +158,30 @@ async def delete_article(
     current_user: User = Depends(get_current_user)
 ):
     """Remove an article owned by current_user from the library."""
-    article = db.query(Article).filter(Article.id == article_id).first()
-
-    if not article:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Article with ID {article_id} not found."
-        )
-    
     try:
-        db.delete(article)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete article: {str(e)}"
-        )
-    return {"message": "Article successfully deleted."}
+        article = db.query(Article).filter(Article.id == article_id).first()
+
+        if not article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Article with ID {article_id} not found."
+            )
+        
+        try:
+            db.delete(article)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete article: {str(e)}"
+            )
+        return {"message": "Article successfully deleted."}
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @router.post("/{article_id}/ask", response_model=AskResponse)
@@ -173,31 +192,45 @@ async def ask_article_ai(
     current_user: User = Depends(get_current_user)
 ):
     """Ask AARC AI a question about an article owned by or accessible to current_user."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    clean_content = ""
+    try:
+        article = db.query(Article).filter(Article.id == article_id).first()
 
-    if not article:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Article with ID {article_id} not found."
-        )
+        if not article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Article with ID {article_id} not found."
+            )
 
-    if not body.question or not body.question.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Question cannot be empty."
-        )
+        if not body.question or not body.question.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Question cannot be empty."
+            )
+
+        clean_content = article.clean_content or ""
+    finally:
+        # Guarantee DB session is closed before calling external AI API to prevent SQLite locks
+        try:
+            db.close()
+        except Exception:
+            pass
 
     try:
         answer = ask_ai(
             question=body.question,
             context=body.context,
-            article_content=article.clean_content,
+            article_content=clean_content,
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI service error: {str(e)}"
-        )
+        print(f"ask_article_ai route exception: {e}")
+        if is_token_or_rate_limit_error(e):
+            answer = TOKEN_LIMIT_FALLBACK
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"AI service error: {str(e)}"
+            )
 
     return AskResponse(answer=answer, article_id=article_id)
 
@@ -210,26 +243,37 @@ async def summarize_article_passage(
     current_user: User = Depends(get_current_user)
 ):
     """Summarize a specific highlighted text passage from an article accessible to current_user using Groq LLM."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    try:
+        article = db.query(Article).filter(Article.id == article_id).first()
 
-    if not article:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Article with ID {article_id} not found."
-        )
+        if not article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Article with ID {article_id} not found."
+            )
 
-    if not body.context or not body.context.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Context passage cannot be empty."
-        )
+        if not body.context or not body.context.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Context passage cannot be empty."
+            )
+    finally:
+        # Guarantee DB session is closed before calling external AI API to prevent SQLite locks
+        try:
+            db.close()
+        except Exception:
+            pass
 
     try:
         summary_text = summarize_passage(context=body.context)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI service error: {str(e)}"
-        )
+        print(f"summarize_article_passage route exception: {e}")
+        if is_token_or_rate_limit_error(e):
+            summary_text = TOKEN_LIMIT_FALLBACK
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"AI service error: {str(e)}"
+            )
 
     return SummarizePassageResponse(summary=summary_text, article_id=article_id)

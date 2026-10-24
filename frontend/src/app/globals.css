@@ -12,8 +12,8 @@ html.dark {
 }
 
 html.sepia {
-  --background: #f8f1e5;
-  --foreground: #433422;
+  --background: #F5EFE6;
+  --foreground: #3B2F2F;
 }
 
 html.light {
@@ -28,8 +28,8 @@ html.light {
   --font-mono: var(--font-geist-mono);
   
   /* Custom Editorial Colors */
-  --color-sepia-bg: #f8f1e5;
-  --color-sepia-text: #433422;
+  --color-sepia-bg: #F5EFE6;
+  --color-sepia-text: #3B2F2F;
 }
 
 html {
@@ -70,8 +70,8 @@ mark {
 
 /* scaleUp for modals/dropdowns that have no inline transform */
 @keyframes scaleUp {
-  from { opacity: 0; transform: scale(0.96) translateX(-50%); }
-  to { opacity: 1; transform: scale(1) translateX(-50%); }
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* tooltipAppear: animates only opacity/scale WITHOUT touching translateX.

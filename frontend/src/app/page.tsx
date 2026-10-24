@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
-  ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut 
+  ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut,
+  Sun, Moon, Eye
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { getArticles, deleteArticle, Article } from '../lib/api';
@@ -139,26 +140,58 @@ export default function LibraryPage() {
             </button>
           </div>
 
-          {/* Color Mode Shortcut inside Left Navigation */}
-          <div className="space-y-1.5 pt-4 border-t border-foreground/5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Display Theme
+        </div>
+
+        {/* Bottom Theme Selector Dock */}
+        <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
+          <div className="flex items-center justify-between px-1 mb-1.5">
+            <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
+              Theme
             </span>
-            <div className="grid grid-cols-3 gap-1 px-1">
-              {(['light', 'sepia', 'dark'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTheme(t)}
-                  className={`py-1 text-[10px] font-bold uppercase rounded-md border transition-colors cursor-pointer ${
-                    theme === t
-                      ? 'bg-indigo-600 text-slate-100 border-indigo-500 shadow-sm'
-                      : 'bg-transparent border-foreground/5 text-foreground/50 hover:text-foreground'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+            <span className="text-[10px] font-semibold text-foreground/40 capitalize">
+              {theme}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Light theme"
+            >
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('sepia')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'sepia'
+                  ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Sepia theme"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Sepia</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Dark theme"
+            >
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark</span>
+            </button>
           </div>
         </div>
 
@@ -321,27 +354,27 @@ export default function LibraryPage() {
         </div>
       </main>
 
-      {/* 3. RIGHT SIDEBAR (350px, Dark Slate #1C1C1E theme) */}
-      <aside className="w-80 bg-[#1C1C1E] text-slate-200 border-l border-slate-800 flex flex-col h-full shrink-0 p-6 overflow-y-auto select-none space-y-8">
+      {/* 3. RIGHT SIDEBAR (350px, Dynamic Theme) */}
+      <aside className="w-80 bg-foreground/[0.02] text-foreground border-l border-foreground/5 flex flex-col h-full shrink-0 p-6 overflow-y-auto select-none space-y-8">
         <div>
           <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
             <BarChart2 className="w-3.5 h-3.5" />
             Library Analytics
           </h3>
-          <div className="grid grid-cols-2 gap-3.5 bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-sm">
+          <div className="grid grid-cols-2 gap-3.5 bg-background border border-foreground/10 rounded-2xl p-4 shadow-sm">
             <div className="flex flex-col">
-              <span className="text-[20px] font-black text-slate-100 font-mono">
+              <span className="text-[20px] font-black text-foreground font-mono">
                 {articles.length}
               </span>
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-[9px] font-bold text-foreground/50 uppercase tracking-wider">
                 Total Columns
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[20px] font-black text-slate-100 font-mono">
+              <span className="text-[20px] font-black text-foreground font-mono">
                 {totalReadingTime}m
               </span>
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-[9px] font-bold text-foreground/50 uppercase tracking-wider">
                 Reading Load
               </span>
             </div>
@@ -363,7 +396,7 @@ export default function LibraryPage() {
                   className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
                     selectedTag === tag
                       ? 'bg-indigo-600 border-indigo-500 text-slate-100 shadow-sm'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      : 'bg-background border-foreground/10 text-foreground/60 hover:text-foreground hover:border-foreground/20'
                   }`}
                 >
                   {tag}
@@ -374,12 +407,12 @@ export default function LibraryPage() {
         )}
 
         {/* Platform Insight Widget */}
-        <div className="bg-gradient-to-tr from-indigo-950/40 to-violet-950/20 border border-indigo-900/30 rounded-2xl p-5 space-y-2 text-slate-200 shadow-sm">
+        <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-5 space-y-2 text-foreground/80 shadow-sm">
           <h4 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
             AARC Assist
           </h4>
-          <p className="text-xs text-slate-400 leading-relaxed">
+          <p className="text-xs text-foreground/60 leading-relaxed">
             AARC automatically parses details, fetches clean web/YouTube pages, strips trackers, and extracts main headings via Groq AI Llama-3.
           </p>
         </div>

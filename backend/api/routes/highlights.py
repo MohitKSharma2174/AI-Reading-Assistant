@@ -18,35 +18,41 @@ async def create_highlight(
     current_user: User = Depends(get_current_user)
 ):
     """Create a text highlight and optional note linked to an article accessible to current_user."""
-    article = db.query(Article).filter(Article.id == article_id).first()
-
-    if not article:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Article with ID {article_id} not found."
-        )
-
-    db_highlight = Highlight(
-        article_id=article_id,
-        selected_text=request.selected_text,
-        note=request.note,
-        position_start=request.position_start,
-        position_end=request.position_end,
-        color=request.color or "yellow"
-    )
-
     try:
-        db.add(db_highlight)
-        db.commit()
-        db.refresh(db_highlight)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save highlight: {str(e)}"
+        article = db.query(Article).filter(Article.id == article_id).first()
+
+        if not article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Article with ID {article_id} not found."
+            )
+
+        db_highlight = Highlight(
+            article_id=article_id,
+            selected_text=request.selected_text,
+            note=request.note,
+            position_start=request.position_start,
+            position_end=request.position_end,
+            color=request.color or "yellow"
         )
 
-    return db_highlight
+        try:
+            db.add(db_highlight)
+            db.commit()
+            db.refresh(db_highlight)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save highlight: {str(e)}"
+            )
+
+        return db_highlight
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 @router.get("/articles/{article_id}/highlights", response_model=List[HighlightResponse])
 async def get_highlights(
@@ -73,21 +79,27 @@ async def delete_highlight(
     current_user: User = Depends(get_current_user)
 ):
     """Delete a highlight by ID."""
-    highlight = db.query(Highlight).filter(Highlight.id == highlight_id).first()
-    if not highlight:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Highlight with ID {highlight_id} not found."
-        )
-
     try:
-        db.delete(highlight)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete highlight: {str(e)}"
-        )
+        highlight = db.query(Highlight).filter(Highlight.id == highlight_id).first()
+        if not highlight:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Highlight with ID {highlight_id} not found."
+            )
 
-    return {"message": "Highlight successfully deleted."}
+        try:
+            db.delete(highlight)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete highlight: {str(e)}"
+            )
+
+        return {"message": "Highlight successfully deleted."}
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass

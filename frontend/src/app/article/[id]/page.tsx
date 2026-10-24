@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Clock, Tag as TagIcon, Sparkles, BookOpen, AlertCircle, 
   RefreshCw, MessageSquare, Trash2, X, Library, BookMarked, User as UserIcon, Plus, 
-  Globe, MessageCircle, Send, Check, LogOut 
+  Globe, MessageCircle, Send, Check, LogOut, Sun, Moon, Eye 
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -18,10 +18,16 @@ import UrlInputBar from '../../../components/UrlInputBar';
 import { useTheme } from '../../../lib/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  context?: string;
+}
+
 export default function ReaderPage() {
   const params = useParams();
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
   
   const idStr = params.id as string;
@@ -35,14 +41,17 @@ export default function ReaderPage() {
   // Ingest Modal state
   const [isIngestOpen, setIsIngestOpen] = useState(false);
 
-  // Collapsible AI Sidebar state
-  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
-
-  // Typography Config (font/size/height only — theme is managed by ThemeContext)
+  // Typography Config (Font, Size, Line Height, Tracking)
   const [typoConfig, setTypoConfig] = useState<TypographyConfig>({
-    font: 'font-serif',
-    size: 'text-lg',
-    height: '1.75',
+    font: 'font-sans',
+    sizeIndex: 2,
+    sizeClass: 'text-lg md:text-xl',
+    lineHeight: 'loose',
+    lineHeightClass: 'leading-loose',
+    tracking: 'default',
+    trackingClass: 'tracking-normal',
+    size: 'text-lg md:text-xl',
+    height: '2.0',
   });
 
   // Text Selection and Tooltip
@@ -50,18 +59,21 @@ export default function ReaderPage() {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [selectedText, setSelectedText] = useState('');
   
-  // Note/Summarize Modal State
-  const [showNoteModal, setShowNoteModal] = useState(false);
+  // Note/Summarize State
   const [noteText, setNoteText] = useState('');
   const [selectedColor, setSelectedColor] = useState('yellow');
   const [summarizeLoading, setSummarizeLoading] = useState(false);
 
-  // Ask AI Modal State
-  const [showAskAIModal, setShowAskAIModal] = useState(false);
+  // Ask AI & Chat State
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [aiQuestion, setAiQuestion] = useState('');
-  const [aiAnswer, setAiAnswer] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const aiInputRef = useRef<HTMLInputElement>(null);
+
+  // Active Highlight & Chat Mode state
+  const activeHighlight = selectedText.trim();
+  const isChatMode = Boolean(activeHighlight || chatHistory.length > 0);
 
   const fetchArticleDetails = async () => {
     setLoading(true);
@@ -133,15 +145,13 @@ export default function ReaderPage() {
     return () => document.removeEventListener('mousedown', handleDocumentClick);
   }, []);
 
-  // Action: Summarize (opens Summarize/Note Modal with real Groq AI summary)
+  // Action: Summarize selected text into Right Sidebar
   const triggerSummarize = async () => {
     if (!selectedText) return;
     
     setNoteText('');
     setSelectedColor('yellow');
-    setShowNoteModal(true);
     setShowTooltip(false);
-    setIsAiSidebarOpen(true);
     setSummarizeLoading(true);
 
     try {
@@ -154,49 +164,52 @@ export default function ReaderPage() {
     }
   };
 
-  const handleAddNoteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedText) return;
+  const handleAddNoteSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedText && !noteText) return;
 
     try {
       const newHl = await createHighlight(id, {
-        selected_text: selectedText,
+        selected_text: selectedText || (article ? article.title : 'Article Note'),
         note: noteText.trim() || undefined,
         color: selectedColor
       });
       setHighlights((prev) => [...prev, newHl]);
       window.getSelection()?.removeAllRanges();
       setNoteText('');
-      setShowNoteModal(false);
+      setSelectedText('');
     } catch (err: any) {
-      alert(err.message || 'Failed to save note.');
+      alert(err.message || 'Failed to save highlight.');
     }
   };
 
-  // Action: Ask AI
+  // Action: Ask AI (focuses sidebar chat input with active passage)
   const triggerAskAI = () => {
-    if (!selectedText) return;
-    setAiQuestion('');
-    setAiAnswer('');
-    setShowAskAIModal(true);
     setShowTooltip(false);
-    setIsAiSidebarOpen(true);
+    setTimeout(() => {
+      aiInputRef.current?.focus();
+    }, 100);
   };
 
   const handleAskAISubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!aiQuestion.trim() || !selectedText) return;
+    if (!aiQuestion.trim()) return;
 
+    const currentQ = aiQuestion.trim();
+    const currentCtx = selectedText;
+    setAiQuestion('');
     setAiLoading(true);
-    setAiAnswer('');
     setAiError('');
+
+    // Append user question to chat history
+    setChatHistory((prev) => [...prev, { role: 'user', content: currentQ, context: currentCtx }]);
 
     try {
       const result = await askArticleAI(id, {
-        question: aiQuestion,
-        context: selectedText,
+        question: currentQ,
+        context: currentCtx || (article?.clean_content ? article.clean_content.slice(0, 2000) : ''),
       });
-      setAiAnswer(result.answer);
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: result.answer, context: currentCtx }]);
     } catch (err: any) {
       setAiError(err.message || 'Failed to get AI response. Please try again.');
     } finally {
@@ -204,18 +217,14 @@ export default function ReaderPage() {
     }
   };
 
-  const handleSaveAIResponseAsNote = async () => {
-    if (!selectedText || !aiAnswer) return;
+  const handleSaveChatAnswerToNotebook = async (answer: string, context?: string) => {
     try {
-      const combinedNote = `Q: ${aiQuestion}\nAI: ${aiAnswer}`;
       const newHl = await createHighlight(id, {
-        selected_text: selectedText,
-        note: combinedNote,
+        selected_text: context || (article ? article.title : 'Article Q&A'),
+        note: answer,
         color: 'blue'
       });
       setHighlights((prev) => [...prev, newHl]);
-      window.getSelection()?.removeAllRanges();
-      setShowAskAIModal(false);
     } catch (err: any) {
       alert(err.message || 'Failed to save AI response.');
     }
@@ -260,6 +269,13 @@ export default function ReaderPage() {
             return (
               <mark
                 key={index}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedText(part);
+                  if (match.note) {
+                    setNoteText(match.note);
+                  }
+                }}
                 className={`${colorClass} px-0.5 rounded cursor-pointer relative group transition-colors duration-150`}
                 title={match.note || undefined}
               >
@@ -377,6 +393,59 @@ export default function ReaderPage() {
           </div>
         </div>
 
+        {/* Bottom Theme Selector Dock */}
+        <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
+          <div className="flex items-center justify-between px-1 mb-1.5">
+            <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
+              Theme
+            </span>
+            <span className="text-[10px] font-semibold text-foreground/40 capitalize">
+              {theme}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Light theme"
+            >
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('sepia')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'sepia'
+                  ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Sepia theme"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Sepia</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
+                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+              }`}
+              title="Dark theme"
+            >
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark</span>
+            </button>
+          </div>
+        </div>
+
         {/* Bottom User Profile & Logout Section */}
         <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -405,10 +474,16 @@ export default function ReaderPage() {
       {/* 2. CENTER CANVAS (Flex-1, Distraction-free reader text layout) */}
       <main 
         onMouseUp={handleSelection}
+        onTouchEnd={handleSelection}
+        onKeyUp={handleSelection}
         className="flex-1 flex flex-col h-full bg-background overflow-y-auto"
       >
         <div className="max-w-[720px] w-full mx-auto px-6 py-12 md:py-16 flex flex-col">
-          <article className="flex flex-col">
+          <article 
+            onMouseUp={handleSelection}
+            onTouchEnd={handleSelection}
+            className="flex flex-col"
+          >
             {/* Source url meta */}
             <div className="flex flex-wrap items-center gap-3.5 mb-4">
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
@@ -427,14 +502,13 @@ export default function ReaderPage() {
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl sm:text-4xl md:text-4xl font-serif font-black tracking-tight leading-tight text-foreground mb-8">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-8 text-foreground font-serif">
               {article.title}
             </h1>
 
-            {/* Article Content Container with inline styles for Line Height override */}
+            {/* Article Content Container with clean, readable typography */}
             <div 
-              className={`max-w-none ${typoConfig.font} ${typoConfig.size} text-foreground/80 antialiased`}
-              style={{ lineHeight: parseFloat(typoConfig.height) }}
+              className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground/90 space-y-6 antialiased`}
             >
               {article.clean_content ? (
                 article.clean_content.split('\n\n').map((paragraph, index) => {
@@ -442,7 +516,7 @@ export default function ReaderPage() {
                   if (!trimmed) return null;
                   
                   return (
-                    <p key={index} className="mb-6">
+                    <p key={index}>
                       {renderParagraphWithHighlights(trimmed)}
                     </p>
                   );
@@ -455,43 +529,238 @@ export default function ReaderPage() {
         </div>
       </main>
 
-      {/* 3. RIGHT SIDEBAR (350px, Dark Slate #1C1C1E theme, collapsible) */}
-      {isAiSidebarOpen && (
-        <aside className="w-80 bg-[#1C1C1E] text-slate-200 border-l border-slate-800 flex flex-col h-full shrink-0 overflow-y-auto select-none p-6 space-y-8 relative">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
-              AI Assistant Panel
-            </h3>
-            <button 
-              onClick={() => setIsAiSidebarOpen(false)}
-              className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-200 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          
-          {/* Groq AI summary widget */}
-          {article.summary && article.summary.bullet_points.length > 0 && (
+      {/* 3. RIGHT SIDEBAR (Anchored Permanent AI Assistant & Notes Sidebar) */}
+      <aside className="w-80 md:w-96 bg-foreground/[0.02] text-foreground border-l border-foreground/5 flex flex-col h-full shrink-0 select-none overflow-hidden">
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-foreground/5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+              isChatMode ? 'bg-indigo-600 text-white shadow-sm' : 'bg-indigo-600/10 text-indigo-400'
+            }`}>
+              <Sparkles className="w-4 h-4 fill-current/25" />
+            </div>
             <div>
-              <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
-                Groq AI Summary
+              <h3 className="font-extrabold text-xs text-foreground tracking-tight leading-none">
+                AARC Assistant
               </h3>
-              <ul className="space-y-3.5 text-xs text-slate-400 pl-4 list-disc marker:text-indigo-500/80 leading-relaxed">
+              <span className="text-[9px] text-foreground/40 font-bold uppercase tracking-widest">
+                {isChatMode ? 'Chat Mode Active' : 'AI Chat & Notes'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {activeHighlight && (
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                Passage Active
+              </span>
+            )}
+            {chatHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setChatHistory([]);
+                  setSelectedText('');
+                  setAiError('');
+                }}
+                className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md text-foreground/40 hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
+                title="Reset chat to article summary"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable Chat History & Annotations Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin flex flex-col">
+          {/* Active Selected Passage Context Card */}
+          {activeHighlight && (
+            <div className="bg-indigo-500/5 border border-indigo-500/15 rounded-2xl p-3 text-xs space-y-1.5 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                  <BookOpen className="w-3 h-3" />
+                  Selected Passage Context
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedText('')}
+                  className="text-[9px] text-foreground/40 hover:text-foreground font-semibold uppercase tracking-wider cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+              <p className="text-foreground/70 italic text-[11px] leading-relaxed line-clamp-3">
+                "{activeHighlight}"
+              </p>
+            </div>
+          )}
+
+          {/* Passage Summary Text Box */}
+          {(summarizeLoading || noteText) && (
+            <div className="bg-background border border-foreground/10 rounded-2xl p-3.5 space-y-2.5 shadow-sm animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 fill-indigo-400/25" />
+                  Passage Summary
+                </span>
+                {summarizeLoading && (
+                  <span className="text-indigo-400 flex items-center gap-1 text-[10px]">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Generating...
+                  </span>
+                )}
+              </div>
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder={summarizeLoading ? "Generating AI summary of passage..." : "Review or modify summary notes..."}
+                disabled={summarizeLoading}
+                rows={3}
+                className="w-full bg-foreground/[0.03] border border-foreground/10 text-foreground placeholder-foreground/40 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs resize-none"
+              />
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-1.5">
+                  {['yellow', 'pink', 'green', 'blue'].map((color) => {
+                    let cBg = 'bg-yellow-400';
+                    if (color === 'pink') cBg = 'bg-pink-400';
+                    if (color === 'green') cBg = 'bg-emerald-400';
+                    if (color === 'blue') cBg = 'bg-sky-400';
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setSelectedColor(color)}
+                        className={`w-4 h-4 rounded-full cursor-pointer transition-transform ${cBg} ${
+                          selectedColor === color ? 'ring-2 ring-indigo-500 scale-110' : 'hover:scale-105 opacity-70'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddNoteSubmit}
+                  disabled={!noteText.trim()}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-bold rounded-lg text-[10px] uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer shadow-sm"
+                >
+                  Save Highlight
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Chat Conversation History (Expands to take up the space where summary was) */}
+          {chatHistory.length > 0 && (
+            <div className="space-y-3 flex-1 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest block">
+                  Conversation
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChatHistory([])}
+                  className="text-[9px] font-bold uppercase tracking-wider text-foreground/35 hover:text-foreground/70 transition-colors cursor-pointer"
+                >
+                  Clear Chat
+                </button>
+              </div>
+              {chatHistory.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`rounded-2xl p-3.5 space-y-1.5 text-xs ${
+                    msg.role === 'user'
+                      ? 'bg-indigo-600/10 border border-indigo-500/20 ml-4'
+                      : 'bg-background border border-foreground/10 mr-2 shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">
+                      {msg.role === 'user' ? 'You' : 'AARC AI'}
+                    </span>
+                    {msg.role === 'assistant' && (
+                      <button
+                        onClick={() => handleSaveChatAnswerToNotebook(msg.content, msg.context)}
+                        className="text-[9px] text-foreground/40 hover:text-indigo-400 flex items-center gap-1 font-bold uppercase tracking-wider cursor-pointer"
+                        title="Save response to highlights notebook"
+                      >
+                        <Check className="w-2.5 h-2.5" />
+                        Save Note
+                      </button>
+                    )}
+                  </div>
+                  {msg.context && msg.role === 'user' && (
+                    <p className="text-[10px] text-foreground/45 italic line-clamp-1 border-l-2 border-indigo-400/40 pl-1.5">
+                      "{msg.context}"
+                    </p>
+                  )}
+                  <p className="text-foreground/80 leading-relaxed whitespace-pre-line">
+                    {msg.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Active Highlight Empty Chat Prompt */}
+          {chatHistory.length === 0 && activeHighlight && !noteText && !summarizeLoading && (
+            <div className="bg-indigo-500/[0.04] border border-dashed border-indigo-500/20 rounded-2xl p-4 text-center space-y-2 animate-fadeIn">
+              <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center text-indigo-400 mx-auto">
+                <MessageCircle className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-semibold text-foreground/90">Passage Linked to Chat</p>
+              <p className="text-[11px] text-foreground/50 leading-relaxed max-w-[220px] mx-auto">
+                Ask a question about this selection below or choose an action.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={triggerSummarize}
+                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  📝 Summarize
+                </button>
+                <button
+                  type="button"
+                  onClick={() => aiInputRef.current?.focus()}
+                  className="px-2.5 py-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  💬 Ask AI
+                </button>
+              </div>
+            </div>
+          )}
+
+          {aiLoading && (
+            <div className="flex items-center gap-2 p-3 bg-indigo-500/5 border border-indigo-500/15 rounded-2xl text-xs text-indigo-400 animate-fadeIn">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>AARC AI is thinking...</span>
+            </div>
+          )}
+          {aiError && (
+            <div className="p-3 bg-red-950/20 border border-red-900/30 rounded-2xl text-xs text-red-400 animate-fadeIn">
+              {aiError}
+            </div>
+          )}
+
+          {/* Groq Article Executive Summary: ONLY visible if user has NOT highlighted text AND user has NOT started a chat */}
+          {!activeHighlight && chatHistory.length === 0 && article?.summary && article.summary.bullet_points.length > 0 && (
+            <div className="pt-2 border-t border-foreground/5 animate-fadeIn">
+              <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
+                Article Executive Summary
+              </h3>
+              <ul className="space-y-2.5 text-xs text-foreground/70 pl-4 list-disc marker:text-indigo-500/80 leading-relaxed">
                 {article.summary.bullet_points.map((bullet, idx) => (
-                  <li key={idx}>
-                    {bullet}
-                  </li>
+                  <li key={idx}>{bullet}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Tags widget */}
-          {article.tags.length > 0 && (
+          {/* Topic Tags */}
+          {article && article.tags.length > 0 && (
             <div>
-              <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
+              <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                 <TagIcon className="w-3.5 h-3.5" />
                 Topic Tags
               </h3>
@@ -499,7 +768,7 @@ export default function ReaderPage() {
                 {article.tags.map((t) => (
                   <span
                     key={t.id}
-                    className="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg bg-slate-900 border border-slate-800 text-slate-400"
+                    className="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg bg-background border border-foreground/10 text-foreground/60"
                   >
                     {t.name}
                   </span>
@@ -508,78 +777,97 @@ export default function ReaderPage() {
             </div>
           )}
 
-          {/* Digital notebook annotations highlights lists */}
+          {/* Digital Notebook Annotations / Highlights */}
           <div>
-            <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
+            <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5" />
               Saved Highlights ({highlights.length})
             </h3>
-            <div className="space-y-4">
-              {highlights.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-xs italic border border-dashed border-slate-800 rounded-2xl p-4">
-                  Select text in the reader canvas to highlight and ask AI questions.
-                </div>
-              ) : (
-                highlights.map((hl) => {
+            {highlights.length === 0 ? (
+              <div className="text-center py-6 text-foreground/40 text-xs italic border border-dashed border-foreground/10 rounded-2xl p-4">
+                Select text in the reader canvas to summarize, ask AI, or highlight.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {highlights.map((hl) => {
                   let dotColor = 'bg-yellow-400';
                   if (hl.color === 'pink') dotColor = 'bg-pink-400';
                   if (hl.color === 'green') dotColor = 'bg-emerald-400';
                   if (hl.color === 'blue') dotColor = 'bg-sky-400';
 
                   return (
-                    <div 
-                      key={hl.id} 
-                      className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 relative group hover:border-slate-700 transition-colors shadow-sm"
+                    <div
+                      key={hl.id}
+                      className="bg-background border border-foreground/10 rounded-2xl p-3.5 relative group hover:border-foreground/20 transition-colors shadow-sm"
                     >
-                      <div className="flex items-center gap-1.5 mb-2">
+                      <div className="flex items-center gap-1.5 mb-1.5">
                         <span className={`w-2 h-2 rounded-full ${dotColor}`}></span>
-                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                        <span className="text-[9px] text-foreground/40 font-bold uppercase tracking-wider">
                           Annotated Highlight
                         </span>
-                        
                         <button
                           onClick={() => handleDeleteHighlight(hl.id)}
-                          className="absolute top-3.5 right-3.5 p-1 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
+                          className="absolute top-3 right-3 p-1 text-foreground/30 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          title="Delete Highlight"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-
-                      <p className="text-xs italic text-slate-400 border-l border-slate-800 pl-2 mb-2 line-clamp-3 leading-relaxed">
+                      <p className="text-xs italic text-foreground/60 border-l border-foreground/15 pl-2 mb-1.5 line-clamp-3 leading-relaxed">
                         "{hl.selected_text}"
                       </p>
-
                       {hl.note && (
-                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80">
-                          <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">
-                            Notes / AI Responses
-                          </span>
-                          <p className="text-xs text-slate-300 font-medium leading-relaxed whitespace-pre-line">
+                        <div className="mt-2 pt-2 border-t border-foreground/5">
+                          <p className="text-xs text-foreground/80 font-medium leading-relaxed whitespace-pre-line">
                             {hl.note}
                           </p>
                         </div>
                       )}
                     </div>
                   );
-                })
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </div>
-        </aside>
-      )}
+        </div>
 
-      {/* Floating Action Button (FAB) to toggle AI Sidebar */}
-      <button
-        onClick={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-slate-100 rounded-full shadow-2xl flex items-center justify-center transition-all duration-200 cursor-pointer border border-indigo-500/20"
-        title="Toggle AI Summary & Notes"
-      >
-        {isAiSidebarOpen ? (
-          <X className="w-6 h-6" />
-        ) : (
-          <MessageCircle className="w-6 h-6" />
-        )}
-      </button>
+        {/* Sticky Bottom Chat Input Bar */}
+        <form onSubmit={handleAskAISubmit} className="p-3 border-t border-foreground/5 bg-background shrink-0 space-y-2">
+          <div className="flex items-center gap-2 bg-foreground/[0.03] border border-foreground/10 rounded-2xl px-3 py-1.5 focus-within:border-indigo-500/50 transition-colors">
+            <input
+              ref={aiInputRef}
+              type="text"
+              value={aiQuestion}
+              onChange={(e) => setAiQuestion(e.target.value)}
+              placeholder={activeHighlight ? "Ask about selected passage..." : "Ask AARC about this article..."}
+              className="flex-1 bg-transparent text-foreground placeholder-foreground/40 text-xs focus:outline-none py-1"
+              disabled={aiLoading}
+            />
+            <button
+              type="submit"
+              disabled={aiLoading || !aiQuestion.trim()}
+              className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 rounded-xl transition-colors disabled:opacity-40 cursor-pointer shadow-sm shrink-0"
+              title="Send message"
+            >
+              {aiLoading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[9px] text-foreground/40 font-medium truncate max-w-[200px]">
+              {activeHighlight ? "Grounded on selection" : "Grounded on article"}
+            </span>
+            {activeHighlight && (
+              <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider shrink-0">
+                Context Active
+              </span>
+            )}
+          </div>
+        </form>
+      </aside>
 
       {/* FLOATING TEXT SELECTION TOOLTIP */}
       {showTooltip && (
@@ -590,195 +878,25 @@ export default function ReaderPage() {
             top: `${tooltipPos.y}px`,
             transform: 'translateX(-50%)'
           }}
-          className="bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-2xl flex items-center gap-1.5 z-50 animate-tooltipAppear text-slate-100 font-sans"
+          className="bg-background border border-foreground/15 rounded-xl p-1 shadow-2xl flex items-center gap-1.5 z-50 animate-tooltipAppear text-foreground font-sans"
         >
           <button
             onClick={triggerSummarize}
-            className="px-3 py-1.5 hover:bg-slate-800 rounded-lg text-xs font-bold flex items-center gap-1 text-yellow-400 hover:text-yellow-300 transition-colors cursor-pointer"
+            className="px-3 py-1.5 hover:bg-foreground/5 rounded-lg text-xs font-bold flex items-center gap-1 text-amber-500 hover:text-amber-400 transition-colors cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>📝 Summarize</span>
           </button>
           
-          <div className="w-px h-5 bg-slate-800"></div>
+          <div className="w-px h-5 bg-foreground/10"></div>
 
           <button
             onClick={triggerAskAI}
-            className="px-3 py-1.5 hover:bg-slate-800 rounded-lg text-xs font-bold flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+            className="px-3 py-1.5 hover:bg-foreground/5 rounded-lg text-xs font-bold flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
           >
             <MessageCircle className="w-3.5 h-3.5" />
             <span>💬 Ask AI</span>
           </button>
-        </div>
-      )}
-
-      {/* SUMMARIZE / ADD NOTE DIALOG MODAL */}
-      {showNoteModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative animate-scaleUp text-slate-100">
-            <button 
-              onClick={() => setShowNoteModal(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-slate-850 rounded-lg text-slate-400 hover:text-slate-100 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <h3 className="font-extrabold text-base text-slate-200 mb-4 flex items-center gap-2">
-              <Sparkles className="w-4.5 h-4.5 text-indigo-400" />
-              Summarize Selected Context
-            </h3>
-
-            <form onSubmit={handleAddNoteSubmit} className="space-y-4">
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
-                  Selected Context
-                </span>
-                <p className="text-xs italic text-slate-400 bg-slate-950 border border-slate-850 rounded-xl p-3 max-h-24 overflow-y-auto">
-                  "{selectedText}"
-                </p>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center justify-between mb-1">
-                  <span>AI Summary / Custom Note</span>
-                  {summarizeLoading && (
-                    <span className="text-indigo-400 flex items-center gap-1 normal-case font-semibold text-xs">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      Generating Groq summary...
-                    </span>
-                  )}
-                </label>
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder={summarizeLoading ? "Generating AI summary of passage..." : "Review or modify summary notes..."}
-                  disabled={summarizeLoading}
-                  rows={4}
-                  className="w-full bg-slate-950 border border-slate-850 text-slate-100 placeholder-slate-650 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-50"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-2">
-                  Highlight Color
-                </span>
-                <div className="flex items-center gap-3">
-                  {['yellow', 'pink', 'green', 'blue'].map((color) => {
-                    let cBg = 'bg-yellow-400';
-                    if (color === 'pink') cBg = 'bg-pink-400';
-                    if (color === 'green') cBg = 'bg-emerald-400';
-                    if (color === 'blue') cBg = 'bg-sky-400';
-
-                    return (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setSelectedColor(color)}
-                        className={`w-6 h-6 rounded-full cursor-pointer transition-transform ${cBg} ${
-                          selectedColor === color ? 'ring-2 ring-indigo-500 scale-110' : 'hover:scale-105'
-                        }`}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNoteModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 bg-transparent rounded-full cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-slate-100 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-md cursor-pointer"
-                >
-                  Save Highlight
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ASK AI DIALOG MODAL */}
-      {showAskAIModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative animate-scaleUp text-slate-100">
-            <button 
-              onClick={() => setShowAskAIModal(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-slate-850 rounded-lg text-slate-400 hover:text-slate-100 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <h3 className="font-extrabold text-base text-slate-200 mb-4 flex items-center gap-2">
-              <MessageCircle className="w-4.5 h-4.5 text-indigo-400" />
-              Ask AARC Assist AI
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
-                  Selected Context
-                </span>
-                <p className="text-xs italic text-slate-400 bg-slate-950 border border-slate-850 rounded-xl p-3 max-h-20 overflow-y-auto">
-                  "{selectedText}"
-                </p>
-              </div>
-
-              {/* Chat question form */}
-              <form onSubmit={handleAskAISubmit} className="flex gap-2">
-                <input
-                  type="text"
-                  value={aiQuestion}
-                  onChange={(e) => setAiQuestion(e.target.value)}
-                  placeholder="Ask a question about this passage..."
-                  className="flex-1 bg-slate-950 border border-slate-850 text-slate-100 placeholder-slate-500 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
-                />
-                <button
-                  type="submit"
-                  disabled={aiLoading || !aiQuestion.trim()}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-slate-100 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {aiLoading ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </form>
-
-              {/* Error display */}
-              {aiError && (
-                <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-3 text-xs text-red-400 animate-fadeIn">
-                  {aiError}
-                </div>
-              )}
-
-              {/* AI Answer display */}
-              {aiAnswer && (
-                <div className="bg-indigo-950/20 border border-indigo-900/30 rounded-2xl p-4 space-y-3 animate-fadeIn">
-                  <div className="flex items-center gap-1 text-[9px] font-bold text-indigo-400 uppercase tracking-widest">
-                    <Sparkles className="w-3 h-3 fill-indigo-400/20" />
-                    AARC AI Answer
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    {aiAnswer}
-                  </p>
-                  <button
-                    onClick={handleSaveAIResponseAsNote}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-bold rounded-lg text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3 h-3" />
-                    Save to Notebook
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       )}
 

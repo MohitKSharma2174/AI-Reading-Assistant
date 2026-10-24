@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes.articles import router as articles_router
 from api.routes.highlights import router as highlights_router
@@ -18,6 +19,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware to prevent database locks and leaks during error states
+@app.middleware("http")
+async def db_lock_prevention_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        print(f"Unhandled error in request pipeline: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error occurred."}
+        )
 
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1")

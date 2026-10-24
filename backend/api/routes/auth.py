@@ -17,47 +17,53 @@ router = APIRouter(
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     """Register a new user account."""
-    email_clean = user_in.email.strip().lower()
-    if not email_clean:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email address cannot be empty."
-        )
-
-    if len(user_in.password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters long."
-        )
-
-    # Check if user with this email already exists
-    existing_user = db.query(User).filter(User.email == email_clean).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email address already exists."
-        )
-
-    # Create new user record
-    hashed_pwd = get_password_hash(user_in.password)
-    db_user = User(
-        email=email_clean,
-        password_hash=hashed_pwd,
-        preferences={}
-    )
-
     try:
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user account: {str(e)}"
+        email_clean = user_in.email.strip().lower()
+        if not email_clean:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email address cannot be empty."
+            )
+
+        if len(user_in.password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 6 characters long."
+            )
+
+        # Check if user with this email already exists
+        existing_user = db.query(User).filter(User.email == email_clean).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email address already exists."
+            )
+
+        # Create new user record
+        hashed_pwd = get_password_hash(user_in.password)
+        db_user = User(
+            email=email_clean,
+            password_hash=hashed_pwd,
+            preferences={}
         )
 
-    return db_user
+        try:
+            db.add(db_user)
+            db.commit()
+            db.refresh(db_user)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create user account: {str(e)}"
+            )
+
+        return db_user
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @router.post("/login", response_model=Token)
@@ -66,18 +72,24 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """Authenticate user with email (username) & password and return JWT access token."""
-    email_clean = form_data.username.strip().lower()
-    user = db.query(User).filter(User.email == email_clean).first()
+    try:
+        email_clean = form_data.username.strip().lower()
+        user = db.query(User).filter(User.email == email_clean).first()
 
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        if not user or not verify_password(form_data.password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=access_token, token_type="bearer")
+        access_token = create_access_token(data={"sub": str(user.id)})
+        return Token(access_token=access_token, token_type="bearer")
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @router.get("/me", response_model=UserResponse)
