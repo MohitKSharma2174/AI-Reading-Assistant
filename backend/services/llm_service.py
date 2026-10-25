@@ -6,10 +6,14 @@ Provides access to Groq LLM pipelines with token limit safety nets and SQLite lo
 import os
 import re
 from typing import List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # LangChain Imports
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
+
 
 # Standard fallback message for 429 and token/context limit errors
 TOKEN_LIMIT_FALLBACK = (
@@ -25,10 +29,12 @@ if groq_key:
         llm = ChatGroq(
             temperature=0,
             model="qwen/qwen3.8-27b",
+            max_tokens=300,
             groq_api_key=groq_key
         )
     except Exception as e:
         print(f"Warning: Failed to initialize ChatGroq: {e}")
+
 
 IS_MOCK = (llm is None)
 if IS_MOCK:
@@ -242,4 +248,51 @@ def process_article_task(article_id: int):
     """Wrapper delegate to services.ai_service.process_article_task."""
     from services.ai_service import process_article_task as _process_article_task
     return _process_article_task(article_id)
+
+
+def explain_text(selected_text: str) -> str:
+    """
+    Explain or define selected text with word-count context awareness and safe Groq error handling.
+    - Word count <= 3: Define specific term in 1-2 short sentences based on general context.
+    - Word count > 3: Rewrite and explain in plain English (Explain Like I'm 5), max 2 sentences.
+    """
+    raw_text = (selected_text or "").strip()
+    if not raw_text:
+        return "No text selected."
+
+    safe_text = raw_text[:2000]
+    words = safe_text.split()
+    word_count = len(words)
+
+    if word_count <= 3:
+        system_prompt = (
+            "You are a reading assistant. Define this specific term in 1-2 short sentences "
+            "based on general context. Be extremely concise."
+        )
+    else:
+        system_prompt = (
+            "You are a reading assistant. Rewrite and explain this sentence in plain, "
+            "simple English (Explain Like I'm 5). Keep it to 2 sentences maximum."
+        )
+
+    if IS_MOCK or llm is None:
+        if word_count <= 3:
+            return f"[Definition] '{safe_text}': A key term or concept referenced in the text."
+        return f"[ELI5] In simple terms: '{safe_text[:60]}...' explained simply."
+
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{text}")
+        ])
+        model = llm.bind(max_tokens=150) if hasattr(llm, "bind") else llm
+        chain = prompt | model
+        response = chain.invoke({"text": safe_text})
+        return response.content.strip()
+
+    except Exception as e:
+        print(f"explain_text Groq error: {e}")
+        return "Unable to explain this selection right now. Please try again."
+
 

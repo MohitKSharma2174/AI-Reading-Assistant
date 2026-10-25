@@ -123,3 +123,23 @@ class TokenData(BaseModel):
     sub: Optional[str] = None
 
 
+class ExplainTextRequest(BaseModel):
+    selected_text: str
+
+
+class ExplainTextResponse(BaseModel):
+    explanation: str
+
+
+class VocabularyCreate(BaseModel):
+    word: str
+    definition: str
+
+
+class VocabularyResponse(BaseModel):
+    id: int
+    word: str
+    definition: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

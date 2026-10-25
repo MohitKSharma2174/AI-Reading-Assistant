@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { 
   Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
   ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut,
-  Sun, Moon, Eye
+  Sun, Moon, Eye, BookText
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { getArticles, deleteArticle, Article } from '../lib/api';
@@ -117,6 +117,13 @@ export default function LibraryPage() {
             >
               <Library className="w-4 h-4" />
               <span>Library</span>
+            </Link>
+            <Link 
+              href="/vocabulary"
+              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+            >
+              <BookText className="w-4 h-4 text-indigo-500" />
+              <span>Vocabulary</span>
             </Link>
             <button
               onClick={() => setIsIngestOpen(true)}

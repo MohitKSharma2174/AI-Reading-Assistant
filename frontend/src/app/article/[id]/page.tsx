@@ -6,11 +6,12 @@ import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Clock, Tag as TagIcon, Sparkles, BookOpen, AlertCircle, 
   RefreshCw, MessageSquare, Trash2, X, Library, BookMarked, User as UserIcon, Plus, 
-  Globe, MessageCircle, Send, Check, LogOut, Sun, Moon, Eye 
+  Globe, MessageCircle, Send, Check, LogOut, Sun, Moon, Eye, Bookmark, BookText 
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
   getArticle, getHighlights, createHighlight, deleteHighlight, askArticleAI, summarizePassageAI,
+  explainText, saveVocabulary,
   Article, Highlight 
 } from '../../../lib/api';
 import TypographyToolbar, { TypographyConfig } from '../../../components/TypographyToolbar';
@@ -54,9 +55,28 @@ export default function ReaderPage() {
     height: '2.0',
   });
 
-  // Text Selection and Tooltip
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  // Text Selection and Jargon Buster Magic Tooltip State
+  interface TooltipState {
+    visible: boolean;
+    x: number;
+    y: number;
+    text: string;
+    loading: boolean;
+    result: string;
+    error: string;
+    saved: boolean;
+  }
+
+  const [tooltipState, setTooltipState] = useState<TooltipState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    text: '',
+    loading: false,
+    result: '',
+    error: '',
+    saved: false,
+  });
   const [selectedText, setSelectedText] = useState('');
   
   // Note/Summarize State
@@ -109,36 +129,97 @@ export default function ReaderPage() {
     }
   }, [id, isAuthenticated]);
 
-  // Selection Handler (Viewport-relative fixed positioning)
-  const handleSelection = () => {
-    const selection = window.getSelection();
-    if (!selection) return;
+  // Selection Handler for Jargon Buster Magic Tooltip
+  const handleMouseUp = async (e: React.MouseEvent) => {
+    // If clicked inside the magic tooltip itself, do not close or retrigger
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('#magic-tooltip')) {
+      return;
+    }
 
-    const text = selection.toString().trim();
-    if (text.length > 2) {
-      try {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        
-        // Calculate raw viewport coordinates (fixed positioning)
-        setTooltipPos({
-          x: rect.left + rect.width / 2,
-          y: rect.top - 45
-        });
-        setSelectedText(text);
-        setShowTooltip(true);
-      } catch (_) {}
-    } else {
-      setShowTooltip(false);
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
+      return;
+    }
+
+    const rawText = selection.toString();
+    const text = rawText.trim();
+    if (!text) {
+      setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
+      return;
+    }
+
+    setSelectedText(text);
+
+    // Strict character limit check (> 200 chars: show tooltip at cursor with error, DO NOT call backend)
+    if (text.length > 200) {
+      setTooltipState({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        text,
+        loading: false,
+        result: '',
+        error: 'Selection too long. Highlight a specific word or short sentence.',
+        saved: false,
+      });
+      return;
+    }
+
+    // <= 200 chars: Calculate bounding client rect to set coordinates just above the text
+    try {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const posX = rect.left + rect.width / 2;
+      const posY = rect.top;
+
+      setTooltipState({
+        visible: true,
+        x: posX,
+        y: posY,
+        text,
+        loading: true,
+        result: '',
+        error: '',
+        saved: false,
+      });
+
+      const res = await explainText(text);
+      const explanation = typeof res === 'string' ? res : (res?.explanation || '');
+
+      setTooltipState((prev) => {
+        if (!prev.visible || prev.text !== text) return prev;
+        return {
+          ...prev,
+          loading: false,
+          result: explanation,
+          error: '',
+        };
+      });
+    } catch (err: any) {
+      setTooltipState((prev) => {
+        if (!prev.visible || prev.text !== text) return prev;
+        return {
+          ...prev,
+          loading: false,
+          result: '',
+          error: err.message || 'Failed to explain text. Please try again.',
+        };
+      });
     }
   };
 
   // Close tooltip on document clicks where selection is collapsed
   useEffect(() => {
-    const handleDocumentClick = () => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('#magic-tooltip')) {
+        return;
+      }
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
-        setShowTooltip(false);
+        setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
       }
     };
     document.addEventListener('mousedown', handleDocumentClick);
@@ -151,7 +232,7 @@ export default function ReaderPage() {
     
     setNoteText('');
     setSelectedColor('yellow');
-    setShowTooltip(false);
+    setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
     setSummarizeLoading(true);
 
     try {
@@ -185,7 +266,7 @@ export default function ReaderPage() {
 
   // Action: Ask AI (focuses sidebar chat input with active passage)
   const triggerAskAI = () => {
-    setShowTooltip(false);
+    setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
     setTimeout(() => {
       aiInputRef.current?.focus();
     }, 100);
@@ -360,6 +441,13 @@ export default function ReaderPage() {
               <Library className="w-4 h-4 text-indigo-500" />
               <span>Library</span>
             </Link>
+            <Link 
+              href="/vocabulary"
+              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+            >
+              <BookText className="w-4 h-4 text-indigo-500" />
+              <span>Vocabulary</span>
+            </Link>
             <button
               onClick={() => setIsIngestOpen(true)}
               className="w-full flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer"
@@ -473,15 +561,12 @@ export default function ReaderPage() {
 
       {/* 2. CENTER CANVAS (Flex-1, Distraction-free reader text layout) */}
       <main 
-        onMouseUp={handleSelection}
-        onTouchEnd={handleSelection}
-        onKeyUp={handleSelection}
+        onMouseUp={handleMouseUp}
         className="flex-1 flex flex-col h-full bg-background overflow-y-auto"
       >
         <div className="max-w-[720px] w-full mx-auto px-6 py-12 md:py-16 flex flex-col">
           <article 
-            onMouseUp={handleSelection}
-            onTouchEnd={handleSelection}
+            onMouseUp={handleMouseUp}
             className="flex flex-col"
           >
             {/* Source url meta */}
@@ -869,34 +954,56 @@ export default function ReaderPage() {
         </form>
       </aside>
 
-      {/* FLOATING TEXT SELECTION TOOLTIP */}
-      {showTooltip && (
+      {/* JARGON BUSTER MAGIC TOOLTIP */}
+      {tooltipState.visible && (
         <div 
+          id="magic-tooltip"
           style={{ 
-            position: 'fixed', 
-            left: `${tooltipPos.x}px`, 
-            top: `${tooltipPos.y}px`,
-            transform: 'translateX(-50%)'
+            left: tooltipState.x, 
+            top: tooltipState.y - 10,
           }}
-          className="bg-background border border-foreground/15 rounded-xl p-1 shadow-2xl flex items-center gap-1.5 z-50 animate-tooltipAppear text-foreground font-sans"
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute z-50 max-w-sm bg-slate-900 text-slate-100 p-3 rounded-xl shadow-2xl border border-slate-700 text-sm animate-tooltipAppear -translate-x-1/2 -translate-y-full pointer-events-auto"
         >
-          <button
-            onClick={triggerSummarize}
-            className="px-3 py-1.5 hover:bg-foreground/5 rounded-lg text-xs font-bold flex items-center gap-1 text-amber-500 hover:text-amber-400 transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>📝 Summarize</span>
-          </button>
-          
-          <div className="w-px h-5 bg-foreground/10"></div>
+          {tooltipState.loading && (
+            <div className="flex items-center gap-2.5 py-1 px-1">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+              </span>
+              <span className="text-slate-300 font-medium text-xs animate-pulse">Analyzing...</span>
+            </div>
+          )}
 
-          <button
-            onClick={triggerAskAI}
-            className="px-3 py-1.5 hover:bg-foreground/5 rounded-lg text-xs font-bold flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>💬 Ask AI</span>
-          </button>
+          {!tooltipState.loading && tooltipState.error && (
+            <p className="text-slate-400 text-xs leading-relaxed py-0.5">
+              {tooltipState.error}
+            </p>
+          )}
+
+          {!tooltipState.loading && !tooltipState.error && tooltipState.result && (
+            <div className="relative pr-6">
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await saveVocabulary(tooltipState.text, tooltipState.result);
+                  setTooltipState((prev) => ({ ...prev, saved: true }));
+                }}
+                className={`absolute top-0 right-0 p-1 rounded-md transition-colors cursor-pointer ${
+                  tooltipState.saved
+                    ? 'text-indigo-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title={tooltipState.saved ? 'Saved to Vocabulary' : 'Save to Vocabulary'}
+              >
+                <Bookmark className={`w-4 h-4 ${tooltipState.saved ? 'fill-indigo-500 text-indigo-500' : ''}`} />
+              </button>
+              <p className="text-slate-100 text-xs leading-relaxed whitespace-pre-line">
+                {tooltipState.result}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

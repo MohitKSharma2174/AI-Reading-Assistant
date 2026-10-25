@@ -2,17 +2,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('aarc_token') || localStorage.getItem('inkwell_token');
+  const token = localStorage.getItem('token') || localStorage.getItem('aarc_token') || localStorage.getItem('inkwell_token');
+  if (token && !localStorage.getItem('token')) {
+    localStorage.setItem('token', token);
+  }
+  return token;
 };
 
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
+    localStorage.setItem('token', token);
     localStorage.setItem('aarc_token', token);
   }
 };
 
 export const removeToken = (): void => {
   if (typeof window !== 'undefined') {
+    localStorage.removeItem('token');
     localStorage.removeItem('aarc_token');
     localStorage.removeItem('inkwell_token');
   }
@@ -335,3 +341,142 @@ export async function summarizePassageAI(
 
   return response.json();
 }
+
+export interface ExplainTextRequest {
+  selected_text: string;
+}
+
+export interface ExplainTextResponse {
+  explanation: string;
+}
+
+export async function explainText(selectedText: string): Promise<ExplainTextResponse> {
+  let backendOrigin = 'http://localhost:8000';
+  try {
+    backendOrigin = new URL(API_BASE_URL).origin;
+  } catch {}
+
+  const candidateUrls = [
+    `${API_BASE_URL}/explain-text`,
+    `${backendOrigin}/api/explain-text`,
+    `${backendOrigin}/api/v1/explain-text`,
+    '/api/explain-text',
+    '/api/v1/explain-text',
+  ];
+
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+  let lastErrorDetail = '';
+
+  for (const targetUrl of uniqueUrls) {
+    try {
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ selected_text: selectedText }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      let detail = '';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || '';
+      } catch {}
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail || errText;
+      }
+    } catch {
+      // Network error or fetch failed, try next candidate
+      continue;
+    }
+  }
+
+  throw new Error(lastErrorDetail || 'AI explanation service currently unavailable. Please try again.');
+}
+
+/* VOCABULARY API CALLS */
+
+export interface VocabularyItem {
+  id: number;
+  word: string;
+  definition: string;
+  created_at: string;
+}
+
+export const saveVocabulary = async (word: string, definition: string): Promise<VocabularyItem> => {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
+  const response = await fetch('/api/vocabulary', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
+    },
+    body: JSON.stringify({ word, definition }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Failed to save vocabulary word';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+};
+
+export const getVocabulary = async (): Promise<VocabularyItem[]> => {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
+  const response = await fetch('/api/vocabulary', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Failed to fetch vocabulary';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+};
+
+export const deleteVocabulary = async (id: number): Promise<{ message: string; id?: number }> => {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
+  const response = await fetch(`/api/vocabulary/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = 'Failed to delete vocabulary item';
+    try {
+      const parsed = JSON.parse(errText);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  return response.json();
+};
+
+
+

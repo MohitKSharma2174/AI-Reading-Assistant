@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, JSON, DateTime, func
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table, JSON, DateTime, func
 from sqlalchemy.orm import relationship
 from core.database import Base
 
@@ -29,6 +30,7 @@ class User(Base):
 
     # Relationships
     articles = relationship("Article", back_populates="user", cascade="all, delete-orphan")
+    vocabularies = relationship("Vocabulary", back_populates="user", cascade="all, delete-orphan")
 
 
 class Article(Base):
@@ -83,3 +85,17 @@ class Highlight(Base):
 
     # Relationships
     article = relationship("Article", back_populates="highlights")
+
+
+class Vocabulary(Base):
+    __tablename__ = "vocabularies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    word = Column(String, index=True, nullable=False)
+    definition = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="vocabularies")
+

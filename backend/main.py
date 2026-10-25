@@ -1,9 +1,22 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+
 from api.routes.articles import router as articles_router
 from api.routes.highlights import router as highlights_router
 from api.routes.auth import router as auth_router
+from api.routes.ai import router as ai_router
+from api.routes.vocabulary import router as vocabulary_router
+
+from core.database import engine, Base
+import models.schema
+
+# Automatically create tables for all registered models on startup / reload
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AARC API",
@@ -36,6 +49,16 @@ async def db_lock_prevention_middleware(request: Request, call_next):
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(articles_router, prefix="/api/v1")
 app.include_router(highlights_router, prefix="/api/v1")
+app.include_router(ai_router, prefix="/api")
+app.include_router(ai_router, prefix="/api/v1")
+app.include_router(ai_router, prefix="/api/api")
+app.include_router(ai_router, prefix="")
+app.include_router(vocabulary_router, prefix="/api")
+app.include_router(vocabulary_router, prefix="/api/v1")
+app.include_router(vocabulary_router, prefix="")
+
+
+
 
 @app.get("/")
 async def root():
