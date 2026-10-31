@@ -987,8 +987,12 @@ export default function ReaderPage() {
                 type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
-                  await saveVocabulary(tooltipState.text, tooltipState.result);
-                  setTooltipState((prev) => ({ ...prev, saved: true }));
+                  try {
+                    await saveVocabulary(tooltipState.text, tooltipState.result);
+                    setTooltipState((prev) => ({ ...prev, saved: true }));
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to save to vocabulary.');
+                  }
                 }}
                 className={`absolute top-0 right-0 p-1 rounded-md transition-colors cursor-pointer ${
                   tooltipState.saved

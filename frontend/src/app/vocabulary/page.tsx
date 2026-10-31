@@ -295,9 +295,25 @@ export default function VocabularyPage() {
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-center gap-3 p-4 bg-red-950/10 border border-red-900/30 rounded-2xl text-red-400 mb-8">
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-              <p className="text-xs font-semibold">{error}</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-red-950/20 border border-red-900/40 rounded-2xl text-red-400 mb-8">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold">{error}</p>
+                  {error.toLowerCase().includes('backend') || error.toLowerCase().includes('connect') || error.toLowerCase().includes('fetch') || error.toLowerCase().includes('failed') || error.toLowerCase().includes('unreachable') ? (
+                    <p className="text-[11px] text-red-400/80 mt-1">
+                      Tip: If running locally, verify the backend is running with <code className="bg-red-950/60 px-1 py-0.5 rounded font-mono text-[10px]">uvicorn main:app --port 8000</code>. If deployed, the backend server (e.g. Render) may take 30–50s to wake up on first request.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleManualSync}
+                className="self-end sm:self-center px-3 py-1.5 text-xs font-bold text-red-300 bg-red-900/30 hover:bg-red-900/50 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                Retry
+              </button>
             </div>
           )}
 

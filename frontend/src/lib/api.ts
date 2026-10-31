@@ -410,73 +410,183 @@ export interface VocabularyItem {
   created_at: string;
 }
 
-export const saveVocabulary = async (word: string, definition: string): Promise<VocabularyItem> => {
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
-  const response = await fetch('/api/vocabulary', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
-    },
-    body: JSON.stringify({ word, definition }),
-  });
+function getVocabularyCandidateUrls(id?: number): string[] {
+  const cleanBase = (API_BASE_URL || '').replace(/\/+$/, '');
+  let backendOrigin = '';
+  try {
+    backendOrigin = new URL(cleanBase).origin;
+  } catch {}
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = 'Failed to save vocabulary word';
-    try {
-      const parsed = JSON.parse(errText);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
+  const suffix = id !== undefined ? `/${id}` : '';
+  const candidates: string[] = [];
+
+  // 1. Direct canonical backend URL from API_BASE_URL (Works in both production deployment & local)
+  if (cleanBase) {
+    candidates.push(`${cleanBase}/vocabulary${suffix}`);
+    candidates.push(`${cleanBase}/vocabulary${suffix}/`);
   }
 
-  return response.json();
+  // 2. Direct backend origin with standard path prefixes if deployed to a remote host (e.g. Render)
+  if (backendOrigin && !backendOrigin.includes('localhost') && !backendOrigin.includes('127.0.0.1')) {
+    candidates.push(`${backendOrigin}/api/v1/vocabulary${suffix}`);
+    candidates.push(`${backendOrigin}/api/v1/vocabulary${suffix}/`);
+    candidates.push(`${backendOrigin}/api/vocabulary${suffix}`);
+    candidates.push(`${backendOrigin}/api/vocabulary${suffix}/`);
+    candidates.push(`${backendOrigin}/vocabulary${suffix}`);
+    candidates.push(`${backendOrigin}/vocabulary${suffix}/`);
+  }
+
+  // 3. Next.js relative route handler fallback (/api/vocabulary)
+  candidates.push(`/api/vocabulary${suffix}`);
+
+  // 4. Local development fallbacks
+  candidates.push(`http://127.0.0.1:8000/api/v1/vocabulary${suffix}`);
+  candidates.push(`http://127.0.0.1:8000/api/v1/vocabulary${suffix}/`);
+  candidates.push(`http://127.0.0.1:8000/api/vocabulary${suffix}`);
+  candidates.push(`http://localhost:8000/api/v1/vocabulary${suffix}`);
+
+  return Array.from(new Set(candidates));
+}
+
+function formatVocabularyError(detail: string): string {
+  if (!detail) {
+    return 'Unable to connect to vocabulary service. The backend server may be waking up or unreachable.';
+  }
+  const lower = detail.toLowerCase();
+  if (lower.includes('fetch failed') || lower.includes('failed to fetch') || lower.includes('internal server error') || lower.includes('internal proxy error')) {
+    return 'Unable to connect to vocabulary service. The backend server may be waking up (e.g. Render free tier) or unreachable. Please try again in a few moments.';
+  }
+  return detail;
+}
+
+export const saveVocabulary = async (word: string, definition: string): Promise<VocabularyItem> => {
+  const candidateUrls = getVocabularyCandidateUrls();
+  let lastErrorDetail = '';
+
+  for (const url of candidateUrls) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ word: word.trim(), definition: definition.trim() }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      let detail = '';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || '';
+      } catch {}
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(detail || 'Authentication required to save vocabulary.');
+      }
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail || errText;
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Authentication required')) {
+        throw err;
+      }
+      continue;
+    }
+  }
+
+  throw new Error(formatVocabularyError(lastErrorDetail));
 };
 
 export const getVocabulary = async (): Promise<VocabularyItem[]> => {
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
-  const response = await fetch('/api/vocabulary', {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
-    },
-  });
+  const candidateUrls = getVocabularyCandidateUrls();
+  let lastErrorDetail = '';
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = 'Failed to fetch vocabulary';
+  for (const url of candidateUrls) {
     try {
-      const parsed = JSON.parse(errText);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      let detail = '';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || '';
+      } catch {}
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(detail || 'Authentication required to view vocabulary.');
+      }
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail || errText;
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Authentication required')) {
+        throw err;
+      }
+      continue;
+    }
   }
 
-  return response.json();
+  throw new Error(formatVocabularyError(lastErrorDetail));
 };
 
 export const deleteVocabulary = async (id: number): Promise<{ message: string; id?: number }> => {
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('aarc_token') || '') : '';
-  const response = await fetch(`/api/vocabulary/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token') || token}`,
-    },
-  });
+  const candidateUrls = getVocabularyCandidateUrls(id);
+  let lastErrorDetail = '';
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = 'Failed to delete vocabulary item';
+  for (const url of candidateUrls) {
     try {
-      const parsed = JSON.parse(errText);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      let detail = '';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || '';
+      } catch {}
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(detail || 'Authentication required to delete vocabulary.');
+      }
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail || errText;
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Authentication required')) {
+        throw err;
+      }
+      continue;
+    }
   }
 
-  return response.json();
+  throw new Error(formatVocabularyError(lastErrorDetail));
 };
+
 
 
 

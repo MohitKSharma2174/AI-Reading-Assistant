@@ -10,11 +10,33 @@ export async function POST(req: NextRequest) {
     }
 
     // Forward to FastAPI backend
-    const backendEndpoints = [
-      'http://localhost:8000/api/v1/explain-text',
-      'http://localhost:8000/api/explain-text',
-      'http://localhost:8000/explain-text',
-    ];
+    const endpoints: string[] = [];
+    const addEndpoint = (base?: string) => {
+      if (!base) return;
+      const clean = base.replace(/\/+$/, '');
+      if (clean.endsWith('/explain-text')) {
+        endpoints.push(clean);
+      } else {
+        endpoints.push(`${clean}/explain-text`);
+      }
+      try {
+        const parsed = new URL(clean);
+        endpoints.push(`${parsed.origin}/api/v1/explain-text`);
+        endpoints.push(`${parsed.origin}/api/explain-text`);
+        endpoints.push(`${parsed.origin}/explain-text`);
+      } catch {}
+    };
+
+    addEndpoint(process.env.BACKEND_URL);
+    addEndpoint(process.env.NEXT_PUBLIC_API_URL);
+    addEndpoint(process.env.API_URL);
+    addEndpoint(process.env.FASTAPI_URL);
+    addEndpoint(process.env.NEXT_PUBLIC_BACKEND_URL);
+    endpoints.push('http://127.0.0.1:8000/api/v1/explain-text');
+    endpoints.push('http://127.0.0.1:8000/api/explain-text');
+    endpoints.push('http://localhost:8000/api/v1/explain-text');
+
+    const backendEndpoints = Array.from(new Set(endpoints));
 
     for (const endpoint of backendEndpoints) {
       try {
