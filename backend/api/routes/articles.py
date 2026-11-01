@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_, cast, String as SqlString
 from core.database import get_db
-from core.deps import get_current_user
-from models.schema import User, Article, Tag
+from core.deps import get_current_user, get_optional_current_user
+from models.schema import User, Article, Tag, Summary
 from models.schemas import (
     ArticleIngestRequest, ArticleIngestResponse,
     ArticleListResponse, ArticleDetailResponse,
     AskRequest, AskResponse,
     SummarizePassageRequest, SummarizePassageResponse,
+    SearchResultResponse,
 )
 from services.extractor import extract_content
 from services.llm_service import (
@@ -142,6 +144,44 @@ async def get_articles(
         
     articles = query.order_by(Article.created_at.desc()).all()
     return articles
+
+
+@router.get("/search", response_model=List[SearchResultResponse])
+async def search_articles_route(
+    q: str = Query("", description="Search query string"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user)
+):
+    """Search articles across title, content, and summary bullet points."""
+    term = q.strip()
+    if not term:
+        return []
+
+    search_pattern = f"%{term}%"
+    query = (
+        db.query(Article)
+        .outerjoin(Summary, Article.id == Summary.article_id)
+        .filter(
+            or_(
+                Article.title.ilike(search_pattern),
+                Article.clean_content.ilike(search_pattern),
+                cast(Summary.bullet_points, SqlString).ilike(search_pattern)
+            )
+        )
+        .order_by(Article.created_at.desc())
+        .limit(20)
+    )
+
+    results = query.all()
+    return [
+        SearchResultResponse(
+            id=a.id,
+            title=a.title,
+            media_type=getattr(a, "media_type", "article") or "article",
+            reading_time=a.reading_time
+        )
+        for a in results
+    ]
 
 
 @router.get("/{article_id}", response_model=ArticleDetailResponse)

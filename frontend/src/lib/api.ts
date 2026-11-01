@@ -607,18 +607,36 @@ export async function searchArticles(query: string): Promise<SearchResult[]> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const candidateUrls = [
-    `/api/search?q=${encodeURIComponent(trimmed)}`,
-    `${API_BASE_URL}/search?q=${encodeURIComponent(trimmed)}`,
-    `http://localhost:8000/api/search?q=${encodeURIComponent(trimmed)}`,
-    `http://127.0.0.1:8000/api/search?q=${encodeURIComponent(trimmed)}`,
-  ];
+  const encoded = encodeURIComponent(trimmed);
+  const candidates: string[] = [];
 
-  for (const url of candidateUrls) {
+  // Direct backend endpoints
+  const cleanApiBase = API_BASE_URL.replace(/\/+$/, '');
+  candidates.push(`${cleanApiBase}/search?q=${encoded}`);
+  candidates.push(`${cleanApiBase}/articles/search?q=${encoded}`);
+
+  try {
+    const origin = new URL(cleanApiBase).origin;
+    candidates.push(`${origin}/api/search?q=${encoded}`);
+    candidates.push(`${origin}/api/v1/search?q=${encoded}`);
+    candidates.push(`${origin}/api/v1/articles/search?q=${encoded}`);
+    candidates.push(`${origin}/search?q=${encoded}`);
+  } catch {}
+
+  // Next.js route proxy endpoints
+  candidates.push(`/api/search?q=${encoded}`);
+  candidates.push(`/api/v1/search?q=${encoded}`);
+
+  const uniqueCandidates = Array.from(new Set(candidates));
+
+  for (const url of uniqueCandidates) {
     try {
       const response = await fetch(url, { headers });
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          return data;
+        }
       }
     } catch {}
   }

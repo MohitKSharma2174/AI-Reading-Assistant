@@ -16,13 +16,35 @@ from api.routes.ai import router as ai_router
 from api.routes.vocabulary import router as vocabulary_router
 
 from core.database import engine, Base, get_db
-from core.deps import get_current_user
+from core.deps import get_current_user, get_optional_current_user
 from models.schema import User, Article, Summary
 from models.schemas import SearchResultResponse
 import models.schema
+from typing import Optional
 
 # Automatically create tables for all registered models on startup / reload
 Base.metadata.create_all(bind=engine)
+
+def ensure_database_schema():
+    """Ensure newly added columns exist in SQLite/Postgres without requiring manual migration."""
+    try:
+        with engine.connect() as conn:
+            try:
+                if str(engine.url).startswith("sqlite"):
+                    cursor = conn.exec_driver_sql("PRAGMA table_info(articles);")
+                    cols = [row[1] for row in cursor.fetchall()]
+                    if "media_type" not in cols:
+                        conn.exec_driver_sql("ALTER TABLE articles ADD COLUMN media_type VARCHAR DEFAULT 'article';")
+                        conn.commit()
+                else:
+                    conn.exec_driver_sql("ALTER TABLE articles ADD COLUMN IF NOT EXISTS media_type VARCHAR DEFAULT 'article';")
+                    conn.commit()
+            except Exception as e:
+                print(f"Schema update note: {e}")
+    except Exception as e:
+        print(f"Database connection note: {e}")
+
+ensure_database_schema()
 
 app = FastAPI(
     title="AARC API",
@@ -72,9 +94,9 @@ app.include_router(vocabulary_router, prefix="")
 async def search_articles_endpoint(
     q: str = Query("", description="Search query string"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
-    """Global search across title, clean content, and AI summary bullet points for authenticated user."""
+    """Global search across title, clean content, and AI summary bullet points."""
     term = q.strip()
     if not term:
         return []
@@ -83,7 +105,6 @@ async def search_articles_endpoint(
     query = (
         db.query(Article)
         .outerjoin(Summary, Article.id == Summary.article_id)
-        .filter(Article.user_id == current_user.id)
         .filter(
             or_(
                 Article.title.ilike(search_pattern),

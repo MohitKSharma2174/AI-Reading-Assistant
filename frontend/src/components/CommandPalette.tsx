@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, FileText, PlayCircle, X, Clock, Loader2 } from 'lucide-react';
+import { searchArticles } from '@/lib/api';
 
 export interface SearchResultItem {
   id: number;
@@ -75,26 +76,8 @@ export default function CommandPalette() {
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const token =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('token') ||
-              localStorage.getItem('aarc_token') ||
-              localStorage.getItem('inkwell_token')
-            : null;
-
-        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setResults(Array.isArray(data) ? data : []);
-        } else {
-          setResults([]);
-        }
+        const data = await searchArticles(trimmed);
+        setResults(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('CommandPalette search error:', err);
         setResults([]);

@@ -50,6 +50,14 @@ const nextConfig: NextConfig = {
         source: '/api/v1/vocabulary/:path*',
         destination: `${BACKEND_URL}/api/v1/vocabulary/:path*`,
       },
+      {
+        source: '/api/search',
+        destination: `${BACKEND_URL}/api/search`,
+      },
+      {
+        source: '/api/v1/search',
+        destination: `${BACKEND_URL}/api/v1/search`,
+      },
     ];
   },
 };

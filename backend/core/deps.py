@@ -8,6 +8,7 @@ from models.schema import User
 from models.schemas import TokenData
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 def get_current_user(
@@ -44,3 +45,29 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def get_optional_current_user(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db)
+) -> User | None:
+    """Decode JWT access token if present; return None if token is missing or invalid."""
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str: str | None = payload.get("sub")
+        if not user_id_str:
+            return None
+        token_data = TokenData(sub=user_id_str)
+    except jwt.PyJWTError:
+        return None
+
+    try:
+        user_id = int(token_data.sub)
+    except (ValueError, TypeError):
+        return db.query(User).filter(User.email == token_data.sub).first()
+
+    return db.query(User).filter(User.id == user_id).first()
+
