@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { 
   Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
   ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut,
-  Sun, Moon, Eye, BookText
+  Sun, Moon, Eye, BookText, PlayCircle, FileText, Search
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { getArticles, deleteArticle, Article } from '../lib/api';
 import UrlInputBar from '../components/UrlInputBar';
 import { useTheme } from '../lib/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { openCommandPalette } from '../components/CommandPalette';
 
 export default function LibraryPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function LibraryPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [tagsList, setTagsList] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'article' | 'video'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -83,6 +85,11 @@ export default function LibraryPage() {
   const totalReadingTime = articles.reduce((acc, art) => acc + (art.reading_time || 1), 0);
   const averageReadingTime = articles.length > 0 ? Math.round(totalReadingTime / articles.length) : 0;
 
+  // Filter items by active tab (all / article / video)
+  const filteredItems = articles.filter((item) =>
+    activeTab === 'all' ? true : (item.media_type || 'article') === activeTab
+  );
+
   return (
     <div className="flex h-screen bg-background text-foreground font-sans transition-colors duration-300 overflow-hidden">
       
@@ -107,6 +114,19 @@ export default function LibraryPage() {
 
         {/* Navigation Section */}
         <div className="flex-1 py-6 px-4 space-y-7 overflow-y-auto">
+          {/* Global Search Trigger */}
+          <div>
+            <button
+              type="button"
+              onClick={() => openCommandPalette()}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground/60 bg-foreground/5 hover:bg-foreground/10 rounded-md transition-colors cursor-pointer"
+            >
+              <Search className="w-4 h-4" />
+              <span>Search...</span>
+              <span className="ml-auto text-xs opacity-50">Ctrl K</span>
+            </button>
+          </div>
+
           <div className="space-y-1.5">
             <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
               Discover
@@ -275,6 +295,45 @@ export default function LibraryPage() {
             </div>
           )}
 
+          {/* Smart Folders Tab Navigation (Segmented Control) */}
+          <div className="flex space-x-2 mb-6 border-b border-foreground/10 pb-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                activeTab === 'all'
+                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
+                  : 'text-foreground/50 hover:text-foreground'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('article')}
+              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 ${
+                activeTab === 'article'
+                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
+                  : 'text-foreground/50 hover:text-foreground'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Articles
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('video')}
+              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 ${
+                activeTab === 'video'
+                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
+                  : 'text-foreground/50 hover:text-foreground'
+              }`}
+            >
+              <PlayCircle className="w-3.5 h-3.5" />
+              Videos
+            </button>
+          </div>
+
           {/* Loading Feed */}
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -283,79 +342,122 @@ export default function LibraryPage() {
                 Fetching Columns...
               </p>
             </div>
-          ) : articles.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             /* Empty Feed */
             <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-foreground/10 rounded-2xl p-8 max-w-md mx-auto mt-6">
               <BookOpen className="w-6 h-6 text-foreground/20 mb-3" />
-              <h3 className="font-serif font-bold text-foreground/80 text-base">No Columns Ingested</h3>
+              <h3 className="font-serif font-bold text-foreground/80 text-base">
+                {activeTab === 'video' 
+                  ? 'No Videos Found' 
+                  : activeTab === 'article' 
+                  ? 'No Articles Found' 
+                  : 'No Columns Ingested'}
+              </h3>
               <p className="text-foreground/40 text-xs mt-1">
-                Click "+ Ingest Link" in the left sidebar to add articles to your personal feed.
+                {articles.length === 0
+                  ? 'Click "+ Ingest Link" in the left sidebar to add articles to your personal feed.'
+                  : `You do not have any ${activeTab === 'video' ? 'videos' : 'articles'} in this smart folder.`}
               </p>
+              {articles.length > 0 && activeTab !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('all')}
+                  className="mt-4 px-3 py-1.5 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  View All Content ({articles.length})
+                </button>
+              )}
             </div>
           ) : (
             /* Articles list in center canvas */
             <div className="flex flex-col">
-              {articles.map((article) => (
-                <Link
-                  key={article.id}
-                  href={`/article/${article.id}`}
-                  className="group flex flex-col py-8 border-b border-foreground/10 hover:border-indigo-500/20 transition-all duration-200 relative gap-3.5"
-                >
-                  <div className="flex items-baseline justify-between">
-                    {/* Time */}
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
-                      <Clock className="w-3 h-3 text-indigo-400/80" />
-                      <span>{article.reading_time ? `${article.reading_time} MIN READ` : '1 MIN READ'}</span>
+              {filteredItems.map((article) => {
+                const isVideo = article.media_type === 'video';
+                return (
+                  <Link
+                    key={article.id}
+                    href={`/article/${article.id}`}
+                    className="group flex flex-col py-8 border-b border-foreground/10 hover:border-indigo-500/20 transition-all duration-200 relative gap-3.5"
+                  >
+                    <div className="flex items-baseline justify-between">
+                      {/* Media Type Badge & Time */}
+                      <div className="flex items-center gap-2.5">
+                        {isVideo ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
+                            <PlayCircle className="w-3 h-3" />
+                            Video
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            <FileText className="w-3 h-3" />
+                            Article
+                          </span>
+                        )}
+
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
+                          <Clock className="w-3 h-3 text-indigo-400/80" />
+                          <span>{article.reading_time ? `${article.reading_time} MIN READ` : '1 MIN READ'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={(e) => handleDelete(article.id, e)}
+                        className="p-1 text-foreground/30 hover:text-red-400 hover:bg-red-500/5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
+                        title="Delete Article"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
-                    <button
-                      onClick={(e) => handleDelete(article.id, e)}
-                      className="p-1 text-foreground/30 hover:text-red-400 hover:bg-red-500/5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
-                      title="Delete Article"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="font-serif font-bold text-xl sm:text-2xl text-foreground group-hover:text-indigo-400 transition-colors duration-200 leading-tight">
-                    {article.title}
-                  </h3>
-
-                  {/* Summary Bullets */}
-                  {article.summary && article.summary.bullet_points.length > 0 ? (
-                    <ul className="space-y-1.5 text-xs sm:text-sm text-foreground/60 pl-4 list-disc marker:text-indigo-500/60 leading-relaxed max-w-2xl">
-                      {article.summary.bullet_points.slice(0, 2).map((bullet, idx) => (
-                        <li key={idx} className="line-clamp-2">
-                          {bullet}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs italic text-foreground/30">
-                      Processing AI summary tags in background...
-                    </p>
-                  )}
-
-                  {/* Tags list */}
-                  {article.tags.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      {article.tags.map((t) => (
-                        <span
-                          key={t.id}
-                          className="px-2 py-0.5 border border-foreground/10 text-[9px] text-foreground/50 rounded-md font-bold uppercase tracking-wider"
-                        >
-                          {t.name}
-                        </span>
-                      ))}
+                    {/* Title with Media Icon */}
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-1 shrink-0">
+                        {isVideo ? (
+                          <PlayCircle className="w-5 h-5 text-red-500/80 group-hover:text-red-500 transition-colors" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-indigo-400/80 group-hover:text-indigo-400 transition-colors" />
+                        )}
+                      </span>
+                      <h3 className="font-serif font-bold text-xl sm:text-2xl text-foreground group-hover:text-indigo-400 transition-colors duration-200 leading-tight flex-1">
+                        {article.title}
+                      </h3>
                     </div>
-                  )}
 
-                  <div className="absolute right-0 bottom-8 translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">
-                    <ChevronRight className="w-5 h-5 text-indigo-400" />
-                  </div>
-                </Link>
-              ))}
+                    {/* Summary Bullets */}
+                    {article.summary && article.summary.bullet_points.length > 0 ? (
+                      <ul className="space-y-1.5 text-xs sm:text-sm text-foreground/60 pl-4 list-disc marker:text-indigo-500/60 leading-relaxed max-w-2xl">
+                        {article.summary.bullet_points.slice(0, 2).map((bullet, idx) => (
+                          <li key={idx} className="line-clamp-2">
+                            {bullet}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs italic text-foreground/30">
+                        Processing AI summary tags in background...
+                      </p>
+                    )}
+
+                    {/* Tags list */}
+                    {article.tags.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {article.tags.map((t) => (
+                          <span
+                            key={t.id}
+                            className="px-2 py-0.5 border border-foreground/10 text-[9px] text-foreground/50 rounded-md font-bold uppercase tracking-wider"
+                          >
+                            {t.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="absolute right-0 bottom-8 translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">
+                      <ChevronRight className="w-5 h-5 text-indigo-400" />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Clock, Tag as TagIcon, Sparkles, BookOpen, AlertCircle, 
   RefreshCw, MessageSquare, Trash2, X, Library, BookMarked, User as UserIcon, Plus, 
-  Globe, MessageCircle, Send, Check, LogOut, Sun, Moon, Eye, Bookmark, BookText 
+  Globe, MessageCircle, Send, Check, LogOut, Sun, Moon, Eye, Bookmark, BookText,
+  PanelLeftClose, PanelLeftOpen, Bot, PlayCircle, FileText, Search
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -19,6 +20,7 @@ import UrlInputBar from '../../../components/UrlInputBar';
 import AudioPlayer from '../../../components/AudioPlayer';
 import { useTheme } from '../../../lib/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
+import { openCommandPalette } from '../../../components/CommandPalette';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -39,6 +41,10 @@ export default function ReaderPage() {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Focus Mode Sidebar States
+  const [isLeftExpanded, setIsLeftExpanded] = useState(true);
+  const [isRightExpanded, setIsRightExpanded] = useState(true);
 
   // Ingest Modal state
   const [isIngestOpen, setIsIngestOpen] = useState(false);
@@ -294,6 +300,7 @@ export default function ReaderPage() {
   const triggerSummarize = async () => {
     if (!selectedText) return;
     
+    setIsRightExpanded(true);
     setNoteText('');
     setSelectedColor('yellow');
     setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
@@ -330,6 +337,7 @@ export default function ReaderPage() {
 
   // Action: Ask AI (focuses sidebar chat input with active passage)
   const triggerAskAI = () => {
+    setIsRightExpanded(true);
     setTooltipState((prev) => ({ ...prev, visible: false, saved: false }));
     setTimeout(() => {
       aiInputRef.current?.focus();
@@ -473,152 +481,258 @@ export default function ReaderPage() {
   return (
     <div className="flex h-screen bg-background text-foreground font-sans transition-colors duration-300 overflow-hidden relative">
       
-      {/* 1. LEFT SIDEBAR (250px, Light/Neutral Sidebar styling) */}
-      <aside className="w-64 bg-foreground/[0.02] border-r border-foreground/5 flex flex-col h-full shrink-0 select-none">
+      {/* 1. LEFT SIDEBAR (Navigation) */}
+      <aside 
+        className={`transition-all duration-300 ${isLeftExpanded ? 'w-64' : 'w-16'} bg-foreground/[0.02] border-r border-foreground/5 flex flex-col h-full shrink-0 select-none overflow-hidden`}
+      >
         {/* Header Title */}
-        <div className="p-6 border-b border-foreground/5">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200">
+        <div className={`p-4 border-b border-foreground/5 flex items-center ${isLeftExpanded ? 'justify-between' : 'justify-center'}`}>
+          <Link 
+            href="/" 
+            onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
+            className={`flex items-center gap-2.5 group ${!isLeftExpanded ? 'justify-center' : ''}`} 
+            title="AARC Reading Companion"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200 shrink-0">
               <BookOpen className="w-4.5 h-4.5 text-slate-100" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
-                AARC
-              </span>
-              <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
-                Reading Companion
-              </span>
-            </div>
+            {isLeftExpanded && (
+              <div className="flex flex-col whitespace-nowrap overflow-hidden">
+                <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
+                  AARC
+                </span>
+                <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
+                  Reading Companion
+                </span>
+              </div>
+            )}
           </Link>
+          {isLeftExpanded && (
+            <button
+              type="button"
+              onClick={() => setIsLeftExpanded(false)}
+              className="p-1.5 hover:bg-foreground/5 text-foreground/40 hover:text-foreground rounded-lg transition-colors cursor-pointer"
+              title="Collapse Sidebar"
+              aria-label="Collapse Sidebar"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Section */}
-        <div className="flex-1 py-6 px-4 space-y-7 overflow-y-auto">
+        <div className="flex-1 py-6 px-3 space-y-7 overflow-y-auto overflow-x-hidden">
+          {/* Global Search Trigger */}
+          <div>
+            {isLeftExpanded ? (
+              <button
+                type="button"
+                onClick={() => openCommandPalette()}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground/60 bg-foreground/5 hover:bg-foreground/10 rounded-md transition-colors cursor-pointer"
+              >
+                <Search className="w-4 h-4" />
+                <span>Search...</span>
+                <span className="ml-auto text-xs opacity-50">Ctrl K</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLeftExpanded(true);
+                  openCommandPalette();
+                }}
+                title="Search... (Ctrl K)"
+                className="flex items-center justify-center w-full py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors cursor-pointer"
+              >
+                <Search className="w-4 h-4 text-indigo-500 shrink-0" />
+              </button>
+            )}
+          </div>
+
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Discover
-            </span>
+            {isLeftExpanded && (
+              <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2 whitespace-nowrap">
+                Discover
+              </span>
+            )}
             <Link 
               href="/"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+              title="Library"
+              onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
+              className={`flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer`}
             >
-              <Library className="w-4 h-4 text-indigo-500" />
-              <span>Library</span>
+              <Library className="w-4 h-4 text-indigo-500 shrink-0" />
+              {isLeftExpanded && <span className="whitespace-nowrap">Library</span>}
             </Link>
             <Link 
               href="/vocabulary"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+              title="Vocabulary"
+              onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
+              className={`flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer`}
             >
-              <BookText className="w-4 h-4 text-indigo-500" />
-              <span>Vocabulary</span>
+              <BookText className="w-4 h-4 text-indigo-500 shrink-0" />
+              {isLeftExpanded && <span className="whitespace-nowrap">Vocabulary</span>}
             </Link>
             <button
-              onClick={() => setIsIngestOpen(true)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer"
+              type="button"
+              onClick={() => {
+                if (!isLeftExpanded) {
+                  setIsLeftExpanded(true);
+                } else {
+                  setIsIngestOpen(true);
+                }
+              }}
+              title="Ingest Link"
+              className={`w-full flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer`}
             >
-              <Plus className="w-4 h-4 text-indigo-500" />
-              <span>Ingest Link</span>
+              <Plus className="w-4 h-4 text-indigo-500 shrink-0" />
+              {isLeftExpanded && <span className="whitespace-nowrap">Ingest Link</span>}
             </button>
           </div>
 
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Saved Archives
-            </span>
+            {isLeftExpanded && (
+              <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2 whitespace-nowrap">
+                Saved Archives
+              </span>
+            )}
             <Link 
               href="/"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+              title="All Articles"
+              onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
+              className={`flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer`}
             >
-              <BookMarked className="w-4 h-4 text-indigo-500" />
-              <span>All Articles</span>
+              <BookMarked className="w-4 h-4 text-indigo-500 shrink-0" />
+              {isLeftExpanded && <span className="whitespace-nowrap">All Articles</span>}
             </Link>
           </div>
 
           {/* Settings Toolbar Popover (Typography settings is embedded in Left Navigation bar) */}
-          <div className="space-y-1.5 pt-4 border-t border-foreground/5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Display Adjuster
-            </span>
-            <div className="px-2">
-              <TypographyToolbar onChange={(conf) => setTypoConfig(conf)} />
+          {isLeftExpanded && (
+            <div className="space-y-1.5 pt-4 border-t border-foreground/5">
+              <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2 whitespace-nowrap">
+                Display Adjuster
+              </span>
+              <div className="px-2">
+                <TypographyToolbar onChange={(conf) => setTypoConfig(conf)} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Bottom Theme Selector Dock */}
-        <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
-          <div className="flex items-center justify-between px-1 mb-1.5">
-            <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
-              Theme
-            </span>
-            <span className="text-[10px] font-semibold text-foreground/40 capitalize">
-              {theme}
-            </span>
+        {isLeftExpanded ? (
+          <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
+            <div className="flex items-center justify-between px-1 mb-1.5">
+              <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
+                Theme
+              </span>
+              <span className="text-[10px] font-semibold text-foreground/40 capitalize">
+                {theme}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+                }`}
+                title="Light theme"
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Light</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('sepia')}
+                className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  theme === 'sepia'
+                    ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+                }`}
+                title="Sepia theme"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Sepia</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
+                }`}
+                title="Dark theme"
+              >
+                <Moon className="w-3.5 h-3.5" />
+                <span>Dark</span>
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
+        ) : (
+          <div className="p-2 border-t border-foreground/5 flex justify-center">
             <button
               type="button"
-              onClick={() => setTheme('light')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Light theme"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'sepia' : 'dark')}
+              className="p-2 text-foreground/50 hover:text-foreground hover:bg-foreground/5 rounded-xl transition-colors cursor-pointer"
+              title={`Current: ${theme}. Click to switch theme.`}
             >
-              <Sun className="w-3.5 h-3.5" />
-              <span>Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('sepia')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'sepia'
-                  ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Sepia theme"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Sepia</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('dark')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Dark theme"
-            >
-              <Moon className="w-3.5 h-3.5" />
-              <span>Dark</span>
+              {theme === 'dark' ? <Moon className="w-4 h-4" /> : theme === 'sepia' ? <Eye className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </button>
           </div>
-        </div>
+        )}
 
         {/* Bottom User Profile & Logout Section */}
-        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`p-3 border-t border-foreground/5 bg-foreground/[0.01] flex items-center ${isLeftExpanded ? 'justify-between gap-2' : 'justify-center'}`}>
+          <div className="flex items-center gap-2.5 min-w-0" title={user ? user.email : 'System Reader'}>
             <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
               <UserIcon className="w-4 h-4" />
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-bold text-xs text-foreground truncate">
-                {user ? user.email.split('@')[0] : 'System Reader'}
-              </span>
-              <span className="text-[9px] text-foreground/45 truncate">
-                {user ? user.email : 'Online'}
-              </span>
-            </div>
+            {isLeftExpanded && (
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold text-xs text-foreground truncate">
+                  {user ? user.email.split('@')[0] : 'System Reader'}
+                </span>
+                <span className="text-[9px] text-foreground/45 truncate">
+                  {user ? user.email : 'Online'}
+                </span>
+              </div>
+            )}
           </div>
+          {isLeftExpanded && (
+            <button
+              onClick={logout}
+              className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+              title="Log Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Bottom Toggle Button for Left Sidebar */}
+        <div className={`p-2.5 border-t border-foreground/5 bg-foreground/[0.02] flex items-center ${isLeftExpanded ? 'justify-between px-3' : 'justify-center'}`}>
+          {isLeftExpanded && (
+            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest">
+              Collapse Sidebar
+            </span>
+          )}
           <button
-            onClick={logout}
-            className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-            title="Log Out"
+            type="button"
+            onClick={() => setIsLeftExpanded(!isLeftExpanded)}
+            className="p-1.5 hover:bg-foreground/5 text-foreground/50 hover:text-foreground rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+            title={isLeftExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+            aria-label={isLeftExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
           >
-            <LogOut className="w-4 h-4" />
+            {isLeftExpanded ? (
+              <PanelLeftClose className="w-4 h-4" />
+            ) : (
+              <PanelLeftOpen className="w-4 h-4" />
+            )}
           </button>
         </div>
       </aside>
@@ -626,88 +740,101 @@ export default function ReaderPage() {
       {/* 2. CENTER CANVAS (Flex-1, Distraction-free reader text layout) */}
       <main 
         onMouseUp={handleMouseUp}
-        className="flex-1 flex flex-col h-full bg-background overflow-y-auto"
+        className={`flex-1 w-full px-6 md:px-12 transition-all duration-300 overflow-y-auto h-full bg-background flex flex-col ${
+          isRightExpanded ? 'mr-80' : 'mr-0'
+        }`}
       >
-        <div className="max-w-[720px] w-full mx-auto px-6 py-12 md:py-16 flex flex-col">
+        <div className="w-full max-w-5xl mx-auto py-12 md:py-16 flex flex-col">
           <article 
             onMouseUp={handleMouseUp}
             className="flex flex-col"
           >
-            {/* Source url meta */}
-            <div className="flex flex-wrap items-center gap-3.5 mb-4">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
-                <Clock className="w-3.5 h-3.5" />
-                <span>{article.reading_time ? `${article.reading_time} MIN READ` : '1 MIN READ'}</span>
-              </div>
-              <span className="text-foreground/30 text-xs">•</span>
-              <a
-                href={article.original_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] font-bold text-foreground/45 hover:text-indigo-400 uppercase tracking-wider transition-colors"
-              >
-                View Source URL
-              </a>
-            </div>
-
-            {/* Title */}
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-8 text-foreground font-serif">
-              {article.title}
-            </h1>
-
-            {/* Sticky Read Aloud Audio Player */}
-            <AudioPlayer
-              articleText={cleanText}
-              onHighlight={handleAudioHighlight}
-              onPlayingChange={setIsPlaying}
-            />
-
-            {/* Article Content Container with clean, readable typography */}
-            {isPlaying || highlight.index > -1 ? (
-              <div 
-                className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground whitespace-pre-line antialiased transition-all duration-200`}
-              >
-                {highlight.index > -1 && highlightedAudioText ? (
-                  <>
-                    <span>{beforeAudioText}</span>
-                    <mark 
-                      ref={activeWordRef}
-                      className="bg-foreground/10 text-foreground rounded-sm px-1 py-0.5 transition-all duration-200"
-                    >
-                      {highlightedAudioText}
-                    </mark>
-                    <span>{afterAudioText}</span>
-                  </>
-                ) : (
-                  <span>{cleanText}</span>
-                )}
-              </div>
+          {/* Source url meta */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            {article.media_type === 'video' ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
+                <PlayCircle className="w-3 h-3" />
+                Video
+              </span>
             ) : (
-              <div 
-                className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground/90 space-y-6 antialiased transition-all duration-200`}
-              >
-                {article.clean_content ? (
-                  article.clean_content.split('\n\n').map((paragraph, index) => {
-                    const trimmed = paragraph.trim();
-                    if (!trimmed) return null;
-                    
-                    return (
-                      <p key={index}>
-                        {renderParagraphWithHighlights(trimmed)}
-                      </p>
-                    );
-                  })
-                ) : (
-                  <p className="italic text-foreground/30">No content available.</p>
-                )}
-              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <FileText className="w-3 h-3" />
+                Article
+              </span>
             )}
-          </article>
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{article.reading_time ? `${article.reading_time} MIN READ` : '1 MIN READ'}</span>
+            </div>
+            <span className="text-foreground/30 text-xs">•</span>
+            <a
+              href={article.original_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-bold text-foreground/45 hover:text-indigo-400 uppercase tracking-wider transition-colors"
+            >
+              View Source URL
+            </a>
+          </div>
+
+          {/* Title */}
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-8 text-foreground font-serif">
+            {article.title}
+          </h1>
+
+          {/* Sticky Read Aloud Audio Player */}
+          <AudioPlayer
+            articleText={cleanText}
+            onHighlight={handleAudioHighlight}
+            onPlayingChange={setIsPlaying}
+          />
+
+          {/* Article Content Container with clean, readable typography */}
+          {isPlaying || highlight.index > -1 ? (
+            <div 
+              className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground whitespace-pre-line antialiased transition-all duration-200`}
+            >
+              {highlight.index > -1 && highlightedAudioText ? (
+                <>
+                  <span>{beforeAudioText}</span>
+                  <mark 
+                    ref={activeWordRef}
+                    className="bg-foreground/10 text-foreground rounded-sm px-1 py-0.5 transition-all duration-200"
+                  >
+                    {highlightedAudioText}
+                  </mark>
+                  <span>{afterAudioText}</span>
+                </>
+              ) : (
+                <span>{cleanText}</span>
+              )}
+            </div>
+          ) : (
+            <div 
+              className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground/90 space-y-6 antialiased transition-all duration-200`}
+            >
+              {article.clean_content ? (
+                article.clean_content.split('\n\n').map((paragraph, index) => {
+                  const trimmed = paragraph.trim();
+                  if (!trimmed) return null;
+                  
+                  return (
+                    <p key={index}>
+                      {renderParagraphWithHighlights(trimmed)}
+                    </p>
+                  );
+                })
+              ) : (
+                <p className="italic text-foreground/30">No content available.</p>
+              )}
+            </div>
+          )}
+        </article>
         </div>
       </main>
 
       {/* 3. RIGHT SIDEBAR (Anchored Permanent AI Assistant & Notes Sidebar) */}
-      <aside className="w-80 md:w-96 bg-foreground/[0.02] text-foreground border-l border-foreground/5 flex flex-col h-full shrink-0 select-none overflow-hidden">
+      <aside className={`transition-all duration-300 fixed right-0 top-0 h-screen z-40 ${isRightExpanded ? 'translate-x-0 w-80' : 'translate-x-full w-80'} bg-background/95 backdrop-blur-md text-foreground border-l border-foreground/10 flex flex-col shrink-0 select-none overflow-hidden shadow-2xl`}>
         {/* Sidebar Header */}
         <div className="p-4 border-b border-foreground/5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -745,6 +872,15 @@ export default function ReaderPage() {
                 Reset
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setIsRightExpanded(false)}
+              className="p-1 hover:bg-foreground/5 text-foreground/40 hover:text-foreground rounded-lg transition-colors cursor-pointer ml-1"
+              title="Close AI Sidebar"
+              aria-label="Close AI Sidebar"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -1045,6 +1181,19 @@ export default function ReaderPage() {
           </div>
         </form>
       </aside>
+
+      {/* Floating Action Button (FAB) when Right Sidebar is collapsed */}
+      {!isRightExpanded && (
+        <button
+          type="button"
+          onClick={() => setIsRightExpanded(true)}
+          className="fixed bottom-6 right-6 z-30 p-4 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 cursor-pointer flex items-center justify-center"
+          title="Open AI Companion"
+          aria-label="Open AI Companion"
+        >
+          <Bot className="w-6 h-6" />
+        </button>
+      )}
 
       {/* JARGON BUSTER MAGIC TOOLTIP */}
       {tooltipState.visible && (

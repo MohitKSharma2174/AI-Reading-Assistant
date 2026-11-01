@@ -42,6 +42,7 @@ class Article(Base):
     title = Column(String, nullable=False)
     clean_content = Column(String, nullable=False)
     reading_time = Column(Integer, nullable=True)
+    media_type = Column(String, default="article", nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships

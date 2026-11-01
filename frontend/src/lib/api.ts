@@ -51,6 +51,7 @@ export interface Article {
   title: string;
   clean_content?: string;
   reading_time: number | null;
+  media_type?: string;
   created_at: string;
   summary: Summary | null;
   tags: Tag[];
@@ -586,6 +587,44 @@ export const deleteVocabulary = async (id: number): Promise<{ message: string; i
 
   throw new Error(formatVocabularyError(lastErrorDetail));
 };
+
+/* GLOBAL SEARCH API */
+
+export interface SearchResult {
+  id: number;
+  title: string;
+  media_type?: string;
+  reading_time?: number | null;
+}
+
+export async function searchArticles(query: string): Promise<SearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const candidateUrls = [
+    `/api/search?q=${encodeURIComponent(trimmed)}`,
+    `${API_BASE_URL}/search?q=${encodeURIComponent(trimmed)}`,
+    `http://localhost:8000/api/search?q=${encodeURIComponent(trimmed)}`,
+    `http://127.0.0.1:8000/api/search?q=${encodeURIComponent(trimmed)}`,
+  ];
+
+  for (const url of candidateUrls) {
+    try {
+      const response = await fetch(url, { headers });
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch {}
+  }
+  return [];
+}
+
 
 
 

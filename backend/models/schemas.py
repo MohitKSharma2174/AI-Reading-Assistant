@@ -4,6 +4,7 @@ from typing import List, Optional
 
 class ArticleIngestRequest(BaseModel):
     url: HttpUrl
+    media_type: Optional[str] = "article"
 
 class SummaryResponse(BaseModel):
     id: int
@@ -24,6 +25,7 @@ class ArticleResponse(BaseModel):
     title: str
     clean_content: str
     reading_time: Optional[int] = None
+    media_type: Optional[str] = "article"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -34,6 +36,7 @@ class ArticleIngestResponse(BaseModel):
     original_url: str
     title: str
     reading_time: Optional[int] = None
+    media_type: Optional[str] = "article"
     created_at: datetime
     already_existed: bool = False
 
@@ -44,6 +47,7 @@ class ArticleListResponse(BaseModel):
     original_url: str
     title: str
     reading_time: Optional[int] = None
+    media_type: Optional[str] = "article"
     created_at: datetime
     summary: Optional[SummaryResponse] = None
     tags: List[TagResponse] = []
@@ -56,9 +60,18 @@ class ArticleDetailResponse(BaseModel):
     title: str
     clean_content: str
     reading_time: Optional[int] = None
+    media_type: Optional[str] = "article"
     created_at: datetime
     summary: Optional[SummaryResponse] = None
     tags: List[TagResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SearchResultResponse(BaseModel):
+    id: int
+    title: str
+    media_type: Optional[str] = "article"
+    reading_time: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

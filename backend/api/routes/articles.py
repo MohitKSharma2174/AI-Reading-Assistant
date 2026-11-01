@@ -47,6 +47,7 @@ async def ingest_article(
                 original_url=existing.original_url,
                 title=existing.title,
                 reading_time=existing.reading_time,
+                media_type=getattr(existing, "media_type", "article") or "article",
                 created_at=existing.created_at,
                 already_existed=True,
             )
@@ -62,13 +63,20 @@ async def ingest_article(
                 detail=f"An error occurred during extraction: {str(e)}"
             )
 
+        # Determine media_type: video if youtube, else article
+        if "youtube.com" in url_str or "youtu.be" in url_str:
+            media_type = "video"
+        else:
+            media_type = "article"
+
         # --- 3. Persist to database bound to current_user.id ---
         db_article = Article(
             user_id=current_user.id,
             original_url=url_str,
             title=extracted["title"],
             clean_content=extracted["clean_content"],
-            reading_time=extracted["reading_time"]
+            reading_time=extracted["reading_time"],
+            media_type=media_type,
         )
 
         try:
@@ -85,6 +93,7 @@ async def ingest_article(
                     original_url=existing.original_url,
                     title=existing.title,
                     reading_time=existing.reading_time,
+                    media_type=getattr(existing, "media_type", "article") or "article",
                     created_at=existing.created_at,
                     already_existed=True,
                 )
@@ -107,6 +116,7 @@ async def ingest_article(
             original_url=db_article.original_url,
             title=db_article.title,
             reading_time=db_article.reading_time,
+            media_type=db_article.media_type,
             created_at=db_article.created_at,
             already_existed=False,
         )

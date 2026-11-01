@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 
 import { ThemeProvider } from "../lib/ThemeContext";
 import { AuthProvider } from "../context/AuthContext";
+import CommandPalette from "../components/CommandPalette";
 
 export const viewport: Viewport = {
   themeColor: "#0f172a",
@@ -44,6 +45,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             {children}
+            <CommandPalette />
           </AuthProvider>
         </ThemeProvider>
         
