@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { 
@@ -16,6 +16,7 @@ import {
 } from '../../../lib/api';
 import TypographyToolbar, { TypographyConfig } from '../../../components/TypographyToolbar';
 import UrlInputBar from '../../../components/UrlInputBar';
+import AudioPlayer from '../../../components/AudioPlayer';
 import { useTheme } from '../../../lib/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -94,6 +95,69 @@ export default function ReaderPage() {
   // Active Highlight & Chat Mode state
   const activeHighlight = selectedText.trim();
   const isChatMode = Boolean(activeHighlight || chatHistory.length > 0);
+
+  // Audio Player and Word Tracking Highlighting State
+  const [highlight, setHighlight] = useState({ index: -1, length: 0 });
+  const [isPlaying, setIsPlaying] = useState(false);
+  const activeWordRef = useRef<HTMLElement | null>(null);
+
+  const handleAudioHighlight = useCallback((index: number, length: number) => {
+    setHighlight((prev) => {
+      if (prev.index === index && prev.length === length) return prev;
+      return { index, length };
+    });
+    setIsPlaying(index > -1);
+  }, []);
+
+  // Auto-scroll the reading canvas when speech position changes
+  useEffect(() => {
+    if (highlight.index > -1 && activeWordRef.current) {
+      activeWordRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      });
+    }
+  }, [highlight.index]);
+
+  // Extract clean plain text for audio player (stripping HTML tags to prevent reading tag names)
+  const cleanText = useMemo(() => {
+    if (!article?.clean_content) return '';
+    return article.clean_content
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/[^\S\r\n]+/g, ' ')
+      .replace(/\n\s*\n+/g, '\n\n')
+      .trim();
+  }, [article?.clean_content]);
+
+  // Synchronized text slicing for real-time speech boundary highlighting
+  const { beforeAudioText, highlightedAudioText, afterAudioText } = useMemo(() => {
+    if (!cleanText || highlight.index < 0) {
+      return { beforeAudioText: cleanText, highlightedAudioText: '', afterAudioText: '' };
+    }
+    const start = Math.max(0, highlight.index);
+    const len =
+      highlight.length > 0
+        ? highlight.length
+        : (cleanText.slice(start).match(/^\S+/)?.[0]?.length || 1);
+    const end = Math.min(cleanText.length, start + len);
+
+    return {
+      beforeAudioText: cleanText.slice(0, start),
+      highlightedAudioText: cleanText.slice(start, end),
+      afterAudioText: cleanText.slice(end),
+    };
+  }, [cleanText, highlight]);
 
   const fetchArticleDetails = async () => {
     setLoading(true);
@@ -591,25 +655,53 @@ export default function ReaderPage() {
               {article.title}
             </h1>
 
+            {/* Sticky Read Aloud Audio Player */}
+            <AudioPlayer
+              articleText={cleanText}
+              onHighlight={handleAudioHighlight}
+              onPlayingChange={setIsPlaying}
+            />
+
             {/* Article Content Container with clean, readable typography */}
-            <div 
-              className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground/90 space-y-6 antialiased`}
-            >
-              {article.clean_content ? (
-                article.clean_content.split('\n\n').map((paragraph, index) => {
-                  const trimmed = paragraph.trim();
-                  if (!trimmed) return null;
-                  
-                  return (
-                    <p key={index}>
-                      {renderParagraphWithHighlights(trimmed)}
-                    </p>
-                  );
-                })
-              ) : (
-                <p className="italic text-foreground/30">No content available.</p>
-              )}
-            </div>
+            {isPlaying || highlight.index > -1 ? (
+              <div 
+                className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground whitespace-pre-line antialiased transition-all duration-200`}
+              >
+                {highlight.index > -1 && highlightedAudioText ? (
+                  <>
+                    <span>{beforeAudioText}</span>
+                    <mark 
+                      ref={activeWordRef}
+                      className="bg-foreground/10 text-foreground rounded-sm px-1 py-0.5 transition-all duration-200"
+                    >
+                      {highlightedAudioText}
+                    </mark>
+                    <span>{afterAudioText}</span>
+                  </>
+                ) : (
+                  <span>{cleanText}</span>
+                )}
+              </div>
+            ) : (
+              <div 
+                className={`max-w-none ${typoConfig.font} ${typoConfig.sizeClass || 'text-lg md:text-xl'} ${typoConfig.lineHeightClass || 'leading-loose'} ${typoConfig.trackingClass || 'tracking-normal'} text-foreground/90 space-y-6 antialiased transition-all duration-200`}
+              >
+                {article.clean_content ? (
+                  article.clean_content.split('\n\n').map((paragraph, index) => {
+                    const trimmed = paragraph.trim();
+                    if (!trimmed) return null;
+                    
+                    return (
+                      <p key={index}>
+                        {renderParagraphWithHighlights(trimmed)}
+                      </p>
+                    );
+                  })
+                ) : (
+                  <p className="italic text-foreground/30">No content available.</p>
+                )}
+              </div>
+            )}
           </article>
         </div>
       </main>
