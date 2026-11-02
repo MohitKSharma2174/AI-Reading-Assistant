@@ -51,6 +51,19 @@ class Article(Base):
     tags = relationship("Tag", secondary=article_tag, back_populates="articles")
     highlights = relationship("Highlight", back_populates="article", cascade="all, delete-orphan")
 
+    def __init__(self, **kwargs):
+        if "content" in kwargs and "clean_content" not in kwargs:
+            kwargs["clean_content"] = kwargs.pop("content")
+        super().__init__(**kwargs)
+
+    @property
+    def content(self):
+        return self.clean_content
+
+    @content.setter
+    def content(self, value):
+        self.clean_content = value
+
 
 class Summary(Base):
     __tablename__ = "summaries"

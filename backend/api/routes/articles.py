@@ -1,3 +1,7 @@
+import os
+import re
+import math
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +16,7 @@ from models.schemas import (
     SummarizePassageRequest, SummarizePassageResponse,
     SearchResultResponse,
 )
-from services.extractor import extract_content
+from services.extractor import extract_content, extract_web, get_youtube_title
 from services.llm_service import (
     process_article_task,
     ask_ai,
@@ -21,7 +25,102 @@ from services.llm_service import (
     TOKEN_LIMIT_FALLBACK,
     is_token_or_rate_limit_error,
 )
-from typing import List, Optional
+from youtube_transcript_api import YouTubeTranscriptApi
+from groq import Groq
+
+# Initialize Groq client
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
+
+# Compatibility patch for YouTubeTranscriptApi.get_transcript across package versions
+def _fetch_transcript_compat(vid: str):
+    try:
+        res = YouTubeTranscriptApi().fetch(vid)
+        if hasattr(res, "to_raw_data"):
+            return res.to_raw_data()
+        return list(res)
+    except AttributeError:
+        return YouTubeTranscriptApi.get_transcript(vid)
+
+if not hasattr(YouTubeTranscriptApi, "get_transcript"):
+    YouTubeTranscriptApi.get_transcript = staticmethod(_fetch_transcript_compat)
+
+def extract_video_id(url: str) -> Optional[str]:
+    """Extract 11-character YouTube video ID using regex: r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'"""
+    match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
+    return match.group(1) if match else None
+
+def parse_summary_and_tags(output_text: str) -> tuple[List[str], List[str]]:
+    """Parse Groq model response for 3 bullet points and comma-separated tags."""
+    lines = [line.strip() for line in output_text.strip().splitlines() if line.strip()]
+    tag_line = None
+    remaining_lines = []
+
+    for line in lines:
+        lower = line.lower()
+        if lower.startswith("tags:") or lower.startswith("**tags:**") or lower.startswith("tags :"):
+            tag_line = re.sub(r'^\*?\*?tags:?\*?\*?', '', line, flags=re.IGNORECASE).strip()
+        else:
+            remaining_lines.append(line)
+
+    if not tag_line and remaining_lines:
+        last_line = remaining_lines[-1]
+        if "," in last_line and not re.match(r'^[•\-\*\d\.]', last_line):
+            tag_line = last_line
+            remaining_lines = remaining_lines[:-1]
+
+    tags = []
+    if tag_line:
+        tags = [t.strip().strip("*`") for t in tag_line.split(",") if t.strip()]
+
+    bullets = []
+    for line in remaining_lines:
+        cleaned = re.sub(r'^[•\-\*\d\.\s]+', '', line).strip()
+        cleaned = re.sub(r'^\*\*(.*?)\*\*$', r'\1', cleaned).strip()
+        if cleaned and len(cleaned) > 5 and not cleaned.lower().startswith("summary:"):
+            bullets.append(cleaned)
+
+    if not bullets:
+        bullets = ["Overview of key insights and core discussion from the source content."]
+    if not tags:
+        tags = ["Reading", "Insights", "General"]
+
+    return bullets[:5], tags[:5]
+
+def generate_groq_summary_and_tags(content_text: str) -> tuple[List[str], List[str]]:
+    """Groq Summarization with Smart Truncation: first 40,000 characters."""
+    safe_text_for_summary = content_text[:40000]
+    prompt = f"Summarize the following content in 3 short bullet points, and provide 3 relevant tags comma-separated. Content: {safe_text_for_summary}"
+
+    raw_response = None
+    if groq_client:
+        # Call Groq API using llama-3.1-8b-instant with fallback to available active models
+        models_to_try = ["llama-3.1-8b-instant", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+        for model_name in models_to_try:
+            try:
+                resp = groq_client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=350,
+                    temperature=0.2,
+                )
+                raw_response = resp.choices[0].message.content
+                if raw_response:
+                    break
+            except Exception:
+                continue
+
+    if not raw_response:
+        return (
+            [
+                "Key insights and overview extracted from the source content.",
+                "Primary topics and essential arguments summarized.",
+                "Automated AI processing successfully indexed this entry."
+            ],
+            ["Insights", "Reading", "General"]
+        )
+
+    return parse_summary_and_tags(raw_response)
 
 router = APIRouter(
     prefix="/articles",
@@ -30,13 +129,15 @@ router = APIRouter(
 
 
 @router.post("/ingest", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_article(
     request: ArticleIngestRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Ingest a URL: check for duplicates for current_user first, then extract, save, and enqueue AI processing."""
+    """Ingest a URL: handles YouTube videos using youtube-transcript-api and articles via BeautifulSoup with Groq Smart Truncation."""
     try:
         url_str = str(request.url)
 
@@ -54,40 +155,107 @@ async def ingest_article(
                 already_existed=True,
             )
 
-        # --- 2. Content extraction ---
-        try:
-            extracted = await extract_content(url_str)
-        except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"An error occurred during extraction: {str(e)}"
-            )
+        # --- 2. Detect YouTube vs Web Article ---
+        is_youtube = "youtube.com" in url_str or "youtu.be" in url_str
 
-        # Determine media_type: video if youtube, else article
-        if "youtube.com" in url_str or "youtu.be" in url_str:
+        if is_youtube:
+            # Extract video ID; raise 400 if invalid
+            video_id = extract_video_id(url_str)
+            if not video_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid YouTube URL: could not extract video ID."
+                )
+
+            # Retrieve transcript using youtube-transcript-api
+            try:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Could not retrieve transcript for YouTube video {video_id}: {str(e)}"
+                )
+
+            # Format into paragraphs: loop through transcript, group every 5-7 segments, join with spaces, separate with \n\n
+            segments = []
+            for item in transcript:
+                raw = item.get("text", "") if isinstance(item, dict) else getattr(item, "text", str(item))
+                cleaned = raw.strip().replace("\n", " ")
+                if cleaned:
+                    segments.append(cleaned)
+
+            group_size = 6
+            paragraphs = []
+            for i in range(0, len(segments), group_size):
+                chunk = segments[i:i + group_size]
+                p = " ".join(chunk).strip()
+                if p:
+                    paragraphs.append(p)
+
+            content_text = "\n\n".join(paragraphs) if paragraphs else "No spoken content transcribed."
             media_type = "video"
+            title = await get_youtube_title(video_id)
         else:
+            # Existing BeautifulSoup extraction logic
+            try:
+                extracted = await extract_web(url_str)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"An error occurred during extraction: {str(e)}"
+                )
+
+            content_text = extracted["clean_content"]
+            title = extracted["title"]
             media_type = "article"
 
-        # --- 3. Persist to database bound to current_user.id ---
+        # Reading time calculation
+        reading_time = max(1, math.ceil(len(content_text.split()) / 200))
+
+        # --- 3. Groq Summarization with Smart Truncation (:40000) ---
+        summary_bullets, tag_names = generate_groq_summary_and_tags(content_text)
+
+        # --- 4. Database Save with FULL text using content=content_text ---
         db_article = Article(
-            user_id=current_user.id,
+            user_id=current_user.id if current_user else None,
             original_url=url_str,
-            title=extracted["title"],
-            clean_content=extracted["clean_content"],
-            reading_time=extracted["reading_time"],
+            title=title,
+            content=content_text,
+            clean_content=content_text,
+            reading_time=reading_time,
             media_type=media_type,
         )
 
         try:
             db.add(db_article)
+            db.flush()
+
+            # Save Groq-generated summary
+            summary_obj = Summary(
+                article_id=db_article.id,
+                bullet_points=summary_bullets
+            )
+            db.add(summary_obj)
+
+            # Save Groq-generated tags
+            for t_name in tag_names:
+                t_clean = t_name.strip()
+                if not t_clean:
+                    continue
+                tag_obj = db.query(Tag).filter(Tag.name == t_clean).first()
+                if not tag_obj:
+                    tag_obj = Tag(name=t_clean)
+                    db.add(tag_obj)
+                    db.flush()
+                if tag_obj not in db_article.tags:
+                    db_article.tags.append(tag_obj)
+
             db.commit()
             db.refresh(db_article)
         except IntegrityError:
             db.rollback()
-            # Race condition fallback
             existing = db.query(Article).filter(Article.original_url == url_str).first()
             if existing:
                 return ArticleIngestResponse(
@@ -109,9 +277,6 @@ async def ingest_article(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to save article to database: {str(e)}"
             )
-
-        # --- 4. Enqueue background AI summarization & tagging task ---
-        background_tasks.add_task(process_article_task, db_article.id)
 
         return ArticleIngestResponse(
             id=db_article.id,

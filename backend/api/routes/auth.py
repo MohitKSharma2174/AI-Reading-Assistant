@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -17,79 +16,97 @@ router = APIRouter(
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     """Register a new user account."""
-    try:
-        email_clean = user_in.email.strip().lower()
-        if not email_clean:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email address cannot be empty."
-            )
-
-        if len(user_in.password) < 6:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password must be at least 6 characters long."
-            )
-
-        # Check if user with this email already exists
-        existing_user = db.query(User).filter(User.email == email_clean).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="An account with this email address already exists."
-            )
-
-        # Create new user record
-        hashed_pwd = get_password_hash(user_in.password)
-        db_user = User(
-            email=email_clean,
-            password_hash=hashed_pwd,
-            preferences={}
+    email_clean = user_in.email.strip().lower()
+    if not email_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address cannot be empty."
         )
 
-        try:
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create user account: {str(e)}"
-            )
+    if len(user_in.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long."
+        )
 
-        return db_user
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
+    # Check if user with this email already exists
+    existing_user = db.query(User).filter(User.email == email_clean).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists."
+        )
+
+    # Create new user record
+    hashed_pwd = get_password_hash(user_in.password)
+    db_user = User(
+        email=email_clean,
+        password_hash=hashed_pwd,
+        preferences={}
+    )
+
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user account: {str(e)}"
+        )
+
+    return db_user
 
 
 @router.post("/login", response_model=Token)
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Authenticate user with email (username) & password and return JWT access token."""
-    try:
-        email_clean = form_data.username.strip().lower()
-        user = db.query(User).filter(User.email == email_clean).first()
+    """Authenticate user with email & password (accepts form-data or JSON) and return JWT access token."""
+    content_type = request.headers.get("content-type", "").lower()
+    email_clean = ""
+    password = ""
 
-        if not user or not verify_password(form_data.password, user.password_hash):
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            email_clean = str(body.get("username") or body.get("email") or "").strip().lower()
+            password = str(body.get("password") or "")
+        except Exception:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password.",
-                headers={"WWW-Authenticate": "Bearer"},
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid JSON payload."
+            )
+    else:
+        try:
+            form_data = await request.form()
+            email_clean = str(form_data.get("username") or form_data.get("email") or "").strip().lower()
+            password = str(form_data.get("password") or "")
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid form data."
             )
 
-        access_token = create_access_token(data={"sub": str(user.id)})
-        return Token(access_token=access_token, token_type="bearer")
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
+    if not email_clean or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both email and password are required."
+        )
+
+    user = db.query(User).filter(User.email == email_clean).first()
+
+    if not user or not verify_password(password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=access_token, token_type="bearer")
 
 
 @router.get("/me", response_model=UserResponse)

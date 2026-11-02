@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  login as apiLogin, 
-  signup as apiSignup, 
-  getCurrentUser, 
-  getToken, 
-  removeToken, 
-  User 
+import {
+  login as apiLogin,
+  signup as apiSignup,
+  getCurrentUser,
+  getToken,
+  removeToken,
+  User
 } from '../lib/api';
 
 interface AuthContextType {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     removeToken();
     setUser(null);
     setIsAuthenticated(false);
-    router.push('/login');
+    router.push('/');
   };
 
   return (

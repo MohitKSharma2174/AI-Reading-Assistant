@@ -1,561 +1,212 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { 
-  Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
-  ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut,
-  Sun, Moon, Eye, BookText, PlayCircle, FileText, Search
+  Sparkles, Headphones, BookOpen, ArrowRight, Check
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { getArticles, deleteArticle, Article } from '../lib/api';
-import UrlInputBar from '../components/UrlInputBar';
-import { useTheme } from '../lib/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { openCommandPalette } from '../components/CommandPalette';
+import HeroAnimator from '../components/HeroAnimator';
+import Sidebar from '../components/Sidebar';
 
-export default function LibraryPage() {
-  const router = useRouter();
-  const { theme, setTheme } = useTheme();
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
-
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [tagsList, setTagsList] = useState<string[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'article' | 'video'>('all');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  
-  // Ingest Modal state
-  const [isIngestOpen, setIsIngestOpen] = useState(false);
-
-  // Protect Route: Redirect to /login if unauthenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, authLoading, router]);
-
-  const fetchArticlesData = async (tagFilter: string | null = null) => {
-    setLoading(true);
-    setError('');
-    try {
-      const fetchedArticles = await getArticles(tagFilter || undefined);
-      setArticles(fetchedArticles);
-
-      // Extract unique tags
-      if (!tagFilter) {
-        const tags = new Set<string>();
-        fetchedArticles.forEach((art) => {
-          art.tags.forEach((t) => tags.add(t.name));
-        });
-        setTagsList(Array.from(tags));
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load articles.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchArticlesData(selectedTag);
-  }, [selectedTag]);
-
-  const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm('Remove this article from your library?')) return;
-
-    try {
-      await deleteArticle(id);
-      setArticles((prev) => prev.filter((a) => a.id !== id));
-      const remaining = articles.filter((a) => a.id !== id);
-      const tags = new Set<string>();
-      remaining.forEach((art) => {
-        art.tags.forEach((t) => tags.add(t.name));
-      });
-      setTagsList(Array.from(tags));
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete article.');
-    }
-  };
-
-  // Metrics for Right Sidebar
-  const totalReadingTime = articles.reduce((acc, art) => acc + (art.reading_time || 1), 0);
-  const averageReadingTime = articles.length > 0 ? Math.round(totalReadingTime / articles.length) : 0;
-
-  // Filter items by active tab (all / article / video)
-  const filteredItems = articles.filter((item) =>
-    activeTab === 'all' ? true : (item.media_type || 'article') === activeTab
-  );
-
+// Lucide-style Youtube Icon
+function Youtube({ className = "w-6 h-6", ...props }: React.SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans transition-colors duration-300 overflow-hidden">
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+      className={className}
+      {...props}
+    >
+      <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+      <polygon points="10 15 15 12 10 9" />
+    </svg>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <main className="min-h-screen bg-background text-foreground selection:bg-indigo-500/30 font-sans transition-colors duration-300">
       
-      {/* 1. LEFT SIDEBAR (250px, Light/Neutral Sidebar styling) */}
-      <aside className="w-64 bg-foreground/[0.02] border-r border-foreground/5 flex flex-col h-full shrink-0 select-none">
-        {/* Header Title */}
-        <div className="p-6 border-b border-foreground/5">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200">
-              <BookOpen className="w-4.5 h-4.5 text-slate-100" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
-                AARC
-              </span>
-              <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
-                Reading Companion
-              </span>
-            </div>
+      {/* Minimal Navigation Header */}
+      <Sidebar />
+
+      {/* Hero Section */}
+      <section className="text-center pt-32 pb-20 px-6">
+        <HeroAnimator />
+
+        <h1 className="text-5xl md:text-7xl font-serif tracking-tight mt-12 mb-6">Anything. Anywhere.<br/>Your Reading Companion.</h1>
+
+        <p className="text-lg text-foreground/60 max-w-xl mx-auto mb-10 font-sans">
+          AARC transforms cluttered web articles and hours of YouTube transcripts into a pure, AI-enhanced reading companion.
+        </p>
+
+        <div className="flex items-center justify-center gap-4">
+          <Link
+            href="/dashboard"
+            className="px-8 py-3 rounded-full bg-foreground text-background font-medium hover:scale-105 transition-transform shadow-lg inline-flex items-center gap-2"
+          >
+            <span>Start Reading</span>
+            <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
+      </section>
 
-        {/* Navigation Section */}
-        <div className="flex-1 py-6 px-4 space-y-7 overflow-y-auto">
-          {/* Global Search Trigger */}
-          <div>
-            <button
-              type="button"
-              onClick={() => openCommandPalette()}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground/60 bg-foreground/5 hover:bg-foreground/10 rounded-md transition-colors cursor-pointer"
-            >
-              <Search className="w-4 h-4" />
-              <span>Search...</span>
-              <span className="ml-auto text-xs opacity-50">Ctrl K</span>
-            </button>
+      {/* The Feature Flow (Scroll Sections) */}
+      <div className="max-w-3xl mx-auto px-6 space-y-40 py-32">
+        
+        {/* Section 1: Universal Ingestion */}
+        <section className="flex flex-col items-start border-l-2 border-foreground/10 pl-6 sm:pl-10 transition-colors">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center mb-6 shadow-sm">
+            <Youtube className="w-6 h-6" />
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Discover
-            </span>
-            <Link 
-              href="/"
-              className="flex items-center gap-3 px-3 py-2 bg-indigo-600/10 text-indigo-400 font-bold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              <Library className="w-4 h-4" />
-              <span>Library</span>
-            </Link>
-            <Link 
-              href="/vocabulary"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              <BookText className="w-4 h-4 text-indigo-500" />
-              <span>Vocabulary</span>
-            </Link>
-            <button
-              onClick={() => setIsIngestOpen(true)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-indigo-500" />
-              <span>Ingest Link</span>
-            </button>
-          </div>
+          <h2 className="text-3xl md:text-5xl font-serif font-bold tracking-tight mb-4 text-foreground">
+            From URLs to pure text.
+          </h2>
 
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Saved Archives
-            </span>
-            <button 
-              onClick={() => setSelectedTag(null)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer"
-            >
-              <BookMarked className="w-4 h-4 text-indigo-500" />
-              <span>All Articles</span>
-            </button>
-          </div>
+          <p className="text-lg text-foreground/60 leading-relaxed font-sans max-w-xl mb-8">
+            Paste any article or a 3-hour YouTube podcast. Our Dual-Engine AI extracts the transcript and formats it instantly.
+          </p>
 
-        </div>
-
-        {/* Bottom Theme Selector Dock */}
-        <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
-          <div className="flex items-center justify-between px-1 mb-1.5">
-            <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
-              Theme
-            </span>
-            <span className="text-[10px] font-semibold text-foreground/40 capitalize">
-              {theme}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setTheme('light')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Light theme"
-            >
-              <Sun className="w-3.5 h-3.5" />
-              <span>Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('sepia')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'sepia'
-                  ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Sepia theme"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Sepia</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('dark')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Dark theme"
-            >
-              <Moon className="w-3.5 h-3.5" />
-              <span>Dark</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom User Profile & Logout Section */}
-        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
-              <UserIcon className="w-4 h-4" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-bold text-xs text-foreground truncate">
-                {user ? user.email.split('@')[0] : 'System Reader'}
-              </span>
-              <span className="text-[9px] text-foreground/45 truncate">
-                {user ? user.email : 'Online'}
+          {/* Visual Editorial Preview Card */}
+          <div className="w-full bg-foreground/[0.02] border border-foreground/10 rounded-2xl p-6 sm:p-7 shadow-xs">
+            <div className="flex items-center gap-3 pb-4 mb-4 border-b border-foreground/10">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="font-mono text-xs text-foreground/50 truncate flex-1">
+                youtube.com/watch?v=3-hour-deep-dive-podcast
+              </div>
+              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider bg-red-500/10 px-2 py-0.5 rounded-md">
+                Dual-Engine AI
               </span>
             </div>
-          </div>
-          <button
-            onClick={logout}
-            className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-            title="Log Out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </aside>
-
-      {/* 2. CENTER CANVAS (Flex-1, Reading columns feed list) */}
-      <main className="flex-1 flex flex-col h-full bg-background overflow-y-auto">
-        <div className="max-w-[720px] w-full mx-auto px-6 py-12 md:py-16 flex flex-col">
-          {/* Header */}
-          <div className="flex items-baseline justify-between mb-10 pb-6 border-b border-foreground/10">
-            <div>
-              <h2 className="text-3xl sm:text-4xl font-serif font-black tracking-tight text-foreground leading-none">
-                Library Feed
-              </h2>
-              <p className="text-foreground/45 text-xs font-bold uppercase tracking-widest mt-2">
-                Distraction-Free Editorial Columns
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-serif font-bold text-foreground text-base">Key Concepts & Chronological Chapters</span>
+                <span className="text-[11px] font-mono text-foreground/40">100% Ad-Free</span>
+              </div>
+              <p className="text-sm text-foreground/70 leading-relaxed font-serif">
+                &ldquo;Every spoken phrase transcribed with high-accuracy timestamps, structured by dynamic headings and AI bulleted summaries.&rdquo;
               </p>
             </div>
-            <button
-              onClick={() => fetchArticlesData(selectedTag)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-indigo-400 border border-foreground/10 rounded-md transition-colors cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Sync Feed
-            </button>
+          </div>
+        </section>
+
+        {/* Section 2: Magic Tooltip */}
+        <section className="flex flex-col items-start border-l-2 border-foreground/10 pl-6 sm:pl-10 transition-colors">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center mb-6 shadow-sm">
+            <Sparkles className="w-6 h-6" />
           </div>
 
-          {/* Active Tag Filtering Alert Banner */}
-          {selectedTag && (
-            <div className="mb-6 flex items-center justify-between p-3.5 bg-indigo-600/5 border border-indigo-500/10 rounded-xl text-xs">
-              <div className="flex items-center gap-2">
-                <TagIcon className="w-4 h-4 text-indigo-400" />
-                <span className="text-foreground/70">
-                  Filtering columns by tag: <strong className="capitalize text-indigo-400">{selectedTag}</strong>
+          <h2 className="text-3xl md:text-5xl font-serif font-bold tracking-tight mb-4 text-foreground">
+            Never hit a wall of jargon.
+          </h2>
+
+          <p className="text-lg text-foreground/60 leading-relaxed font-sans max-w-xl mb-8">
+            Highlight any complex term for an instant ELI5 definition, automatically saved to your personal vocabulary builder.
+          </p>
+
+          {/* Visual Editorial Preview Card */}
+          <div className="w-full bg-foreground/[0.02] border border-foreground/10 rounded-2xl p-6 sm:p-7 shadow-xs relative overflow-hidden">
+            <p className="text-sm sm:text-base font-serif text-foreground/80 leading-relaxed mb-4">
+              Modern distributed consensus relies heavily on{" "}
+              <span className="bg-amber-500/20 text-foreground font-semibold px-1.5 py-0.5 rounded border border-amber-500/40 relative">
+                Byzantine Fault Tolerance
+              </span>{" "}
+              to safeguard transaction finality across asymmetric adversarial networks.
+            </p>
+
+            <div className="bg-background border border-foreground/15 rounded-xl p-4 shadow-md max-w-md mt-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  ELI5 Definition
+                </span>
+                <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                  <Check className="w-3 h-3" /> Saved to Vocabulary
                 </span>
               </div>
-              <button 
-                onClick={() => setSelectedTag(null)}
-                className="text-foreground/40 hover:text-foreground text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-              >
-                Clear Filter
-              </button>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="flex items-center gap-3 p-4 bg-red-950/10 border border-red-900/30 rounded-2xl text-red-400 mb-8">
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-              <p className="text-xs font-semibold">{error}</p>
-            </div>
-          )}
-
-          {/* Smart Folders Tab Navigation (Segmented Control) */}
-          <div className="flex space-x-2 mb-6 border-b border-foreground/10 pb-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
-                activeTab === 'all'
-                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
-                  : 'text-foreground/50 hover:text-foreground'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('article')}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 ${
-                activeTab === 'article'
-                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
-                  : 'text-foreground/50 hover:text-foreground'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Articles
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('video')}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 ${
-                activeTab === 'video'
-                  ? 'text-foreground border-b-2 border-indigo-500 font-medium'
-                  : 'text-foreground/50 hover:text-foreground'
-              }`}
-            >
-              <PlayCircle className="w-3.5 h-3.5" />
-              Videos
-            </button>
-          </div>
-
-          {/* Loading Feed */}
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-3">
-              <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
-              <p className="text-foreground/40 text-xs font-bold uppercase tracking-widest">
-                Fetching Columns...
+              <p className="text-xs text-foreground/75 leading-relaxed font-sans">
+                It means a computer network can still reach agreement even if some computers lie, fail, or try to disrupt the system.
               </p>
             </div>
-          ) : filteredItems.length === 0 ? (
-            /* Empty Feed */
-            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-foreground/10 rounded-2xl p-8 max-w-md mx-auto mt-6">
-              <BookOpen className="w-6 h-6 text-foreground/20 mb-3" />
-              <h3 className="font-serif font-bold text-foreground/80 text-base">
-                {activeTab === 'video' 
-                  ? 'No Videos Found' 
-                  : activeTab === 'article' 
-                  ? 'No Articles Found' 
-                  : 'No Columns Ingested'}
-              </h3>
-              <p className="text-foreground/40 text-xs mt-1">
-                {articles.length === 0
-                  ? 'Click "+ Ingest Link" in the left sidebar to add articles to your personal feed.'
-                  : `You do not have any ${activeTab === 'video' ? 'videos' : 'articles'} in this smart folder.`}
-              </p>
-              {articles.length > 0 && activeTab !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('all')}
-                  className="mt-4 px-3 py-1.5 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  View All Content ({articles.length})
-                </button>
-              )}
-            </div>
-          ) : (
-            /* Articles list in center canvas */
-            <div className="flex flex-col">
-              {filteredItems.map((article) => {
-                const isVideo = article.media_type === 'video';
-                return (
-                  <Link
-                    key={article.id}
-                    href={`/article/${article.id}`}
-                    className="group flex flex-col py-8 border-b border-foreground/10 hover:border-indigo-500/20 transition-all duration-200 relative gap-3.5"
-                  >
-                    <div className="flex items-baseline justify-between">
-                      {/* Media Type Badge & Time */}
-                      <div className="flex items-center gap-2.5">
-                        {isVideo ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
-                            <PlayCircle className="w-3 h-3" />
-                            Video
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                            <FileText className="w-3 h-3" />
-                            Article
-                          </span>
-                        )}
-
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
-                          <Clock className="w-3 h-3 text-indigo-400/80" />
-                          <span>{article.reading_time ? `${article.reading_time} MIN READ` : '1 MIN READ'}</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={(e) => handleDelete(article.id, e)}
-                        className="p-1 text-foreground/30 hover:text-red-400 hover:bg-red-500/5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
-                        title="Delete Article"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Title with Media Icon */}
-                    <div className="flex items-start gap-2.5">
-                      <span className="mt-1 shrink-0">
-                        {isVideo ? (
-                          <PlayCircle className="w-5 h-5 text-red-500/80 group-hover:text-red-500 transition-colors" />
-                        ) : (
-                          <FileText className="w-5 h-5 text-indigo-400/80 group-hover:text-indigo-400 transition-colors" />
-                        )}
-                      </span>
-                      <h3 className="font-serif font-bold text-xl sm:text-2xl text-foreground group-hover:text-indigo-400 transition-colors duration-200 leading-tight flex-1">
-                        {article.title}
-                      </h3>
-                    </div>
-
-                    {/* Summary Bullets */}
-                    {article.summary && article.summary.bullet_points.length > 0 ? (
-                      <ul className="space-y-1.5 text-xs sm:text-sm text-foreground/60 pl-4 list-disc marker:text-indigo-500/60 leading-relaxed max-w-2xl">
-                        {article.summary.bullet_points.slice(0, 2).map((bullet, idx) => (
-                          <li key={idx} className="line-clamp-2">
-                            {bullet}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs italic text-foreground/30">
-                        Processing AI summary tags in background...
-                      </p>
-                    )}
-
-                    {/* Tags list */}
-                    {article.tags.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {article.tags.map((t) => (
-                          <span
-                            key={t.id}
-                            className="px-2 py-0.5 border border-foreground/10 text-[9px] text-foreground/50 rounded-md font-bold uppercase tracking-wider"
-                          >
-                            {t.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="absolute right-0 bottom-8 translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">
-                      <ChevronRight className="w-5 h-5 text-indigo-400" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* 3. RIGHT SIDEBAR (350px, Dynamic Theme) */}
-      <aside className="w-80 bg-foreground/[0.02] text-foreground border-l border-foreground/5 flex flex-col h-full shrink-0 p-6 overflow-y-auto select-none space-y-8">
-        <div>
-          <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
-            <BarChart2 className="w-3.5 h-3.5" />
-            Library Analytics
-          </h3>
-          <div className="grid grid-cols-2 gap-3.5 bg-background border border-foreground/10 rounded-2xl p-4 shadow-sm">
-            <div className="flex flex-col">
-              <span className="text-[20px] font-black text-foreground font-mono">
-                {articles.length}
-              </span>
-              <span className="text-[9px] font-bold text-foreground/50 uppercase tracking-wider">
-                Total Columns
-              </span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[20px] font-black text-foreground font-mono">
-                {totalReadingTime}m
-              </span>
-              <span className="text-[9px] font-bold text-foreground/50 uppercase tracking-wider">
-                Reading Load
-              </span>
-            </div>
           </div>
-        </div>
+        </section>
 
-        {/* Global Topics Tag Cloud */}
-        {tagsList.length > 0 && (
-          <div>
-            <h3 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
-              <TagIcon className="w-3.5 h-3.5" />
-              Tag Explorer
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {tagsList.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                  className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
-                    selectedTag === tag
-                      ? 'bg-indigo-600 border-indigo-500 text-slate-100 shadow-sm'
-                      : 'bg-background border-foreground/10 text-foreground/60 hover:text-foreground hover:border-foreground/20'
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
+        {/* Section 3: Native Audio */}
+        <section className="flex flex-col items-start border-l-2 border-foreground/10 pl-6 sm:pl-10 transition-colors">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center mb-6 shadow-sm">
+            <Headphones className="w-6 h-6" />
           </div>
-        )}
 
-        {/* Platform Insight Widget */}
-        <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-5 space-y-2 text-foreground/80 shadow-sm">
-          <h4 className="font-extrabold text-[10px] text-indigo-400 uppercase tracking-widest flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 fill-indigo-400/25" />
-            AARC Assist
-          </h4>
-          <p className="text-xs text-foreground/60 leading-relaxed">
-            AARC automatically parses details, fetches clean web/YouTube pages, strips trackers, and extracts main headings via Groq AI Llama-3.
+          <h2 className="text-3xl md:text-5xl font-serif font-bold tracking-tight mb-4 text-foreground">
+            Listen anywhere.
+          </h2>
+
+          <p className="text-lg text-foreground/60 leading-relaxed font-sans max-w-xl mb-8">
+            Turn any text into a seamless audio experience with native, zero-cost word tracking.
           </p>
-        </div>
-      </aside>
 
-      {/* URL INGEST MODAL DIALOG (Connects with UrlInputBar) */}
-      {isIngestOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative animate-scaleUp text-slate-100">
-            <button 
-              onClick={() => setIsIngestOpen(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-100 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="mb-6">
-              <h3 className="font-extrabold text-base text-slate-200 flex items-center gap-2">
-                <Globe className="w-4.5 h-4.5 text-indigo-400" />
-                Ingest New Content
-              </h3>
-              <p className="text-slate-500 text-xs mt-1">
-                Paste any standard Web article URL or YouTube video link to scrape, clean, and analyze it.
-              </p>
+          {/* Visual Editorial Preview Card */}
+          <div className="w-full bg-foreground/[0.02] border border-foreground/10 rounded-2xl p-6 sm:p-7 shadow-xs">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-foreground/10">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-indigo-600 text-slate-100 flex items-center justify-center shadow-xs">
+                  <Headphones className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-foreground">Browser Speech Synthesis</span>
+                  <span className="text-[10px] text-foreground/45">Karaoke Word-Tracking • 1.0x - 2.0x</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                Zero Cloud Cost
+              </span>
             </div>
 
-            {/* Embed original UrlInputBar */}
-            <UrlInputBar onIngestSuccess={() => {
-              setIsIngestOpen(false);
-              fetchArticlesData(selectedTag);
-            }} />
+            {/* Karaoke simulated text highlighting */}
+            <p className="text-base font-serif leading-loose text-foreground/50">
+              <span className="bg-indigo-500/30 text-foreground px-1 py-0.5 rounded font-medium">
+                The reading companion that follows your eyes and ears
+              </span>{" "}
+              without demanding extra subscriptions or burning expensive cloud TTS quotas.
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      {/* Editorial Footer */}
+      <footer className="border-t border-foreground/10 py-16 px-6 bg-foreground/[0.01]">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-slate-100">
+              <BookOpen className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm text-foreground">AARC Reading Companion</p>
+              <p className="text-xs text-foreground/40">Distraction-free, ad-free editorial reading.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 text-xs text-foreground/60">
+            <Link href="/dashboard" className="hover:text-foreground transition-colors font-medium">
+              Open Dashboard
+            </Link>
+            <Link href="/vocabulary" className="hover:text-foreground transition-colors font-medium">
+              Vocabulary
+            </Link>
+            <Link href="/login" className="hover:text-foreground transition-colors font-medium">
+              Sign In
+            </Link>
           </div>
         </div>
-      )}
-    </div>
+      </footer>
+    </main>
   );
 }

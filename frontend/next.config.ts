@@ -58,6 +58,14 @@ const nextConfig: NextConfig = {
         source: '/api/v1/search',
         destination: `${BACKEND_URL}/api/v1/search`,
       },
+      {
+        source: '/api/v1/:path*',
+        destination: `${BACKEND_URL}/api/v1/:path*`,
+      },
+      {
+        source: '/api/:path*',
+        destination: `${BACKEND_URL}/api/:path*`,
+      },
     ];
   },
 };

@@ -2,14 +2,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, Request, Query, Depends
+import os
+import re
+from fastapi import FastAPI, Request, Query, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, cast, String as SqlString
-from typing import List
+from typing import List, Optional
+from youtube_transcript_api import YouTubeTranscriptApi
+from groq import Groq
 
-from api.routes.articles import router as articles_router
+from api.routes.articles import router as articles_router, extract_video_id, ingest_article
 from api.routes.highlights import router as highlights_router
 from api.routes.auth import router as auth_router
 from api.routes.ai import router as ai_router
@@ -18,9 +22,12 @@ from api.routes.vocabulary import router as vocabulary_router
 from core.database import engine, Base, get_db
 from core.deps import get_current_user, get_optional_current_user
 from models.schema import User, Article, Summary
-from models.schemas import SearchResultResponse
+from models.schemas import SearchResultResponse, ArticleIngestResponse
 import models.schema
-from typing import Optional
+
+# Initialize Groq client
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 # Automatically create tables for all registered models on startup / reload
 Base.metadata.create_all(bind=engine)
@@ -55,7 +62,15 @@ app = FastAPI(
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with specific origins e.g. ["http://localhost:3000"]
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,8 +90,14 @@ async def db_lock_prevention_middleware(request: Request, call_next):
 
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api")
+app.include_router(auth_router, prefix="")
 app.include_router(articles_router, prefix="/api/v1")
+app.include_router(articles_router, prefix="/api")
+app.include_router(articles_router, prefix="")
 app.include_router(highlights_router, prefix="/api/v1")
+app.include_router(highlights_router, prefix="/api")
+app.include_router(highlights_router, prefix="")
 app.include_router(ai_router, prefix="/api")
 app.include_router(ai_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/api")
@@ -84,6 +105,12 @@ app.include_router(ai_router, prefix="")
 app.include_router(vocabulary_router, prefix="/api")
 app.include_router(vocabulary_router, prefix="/api/v1")
 app.include_router(vocabulary_router, prefix="")
+
+# Ingestion Route Aliases
+app.post("/api/articles", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)(ingest_article)
+app.post("/api/ingest", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)(ingest_article)
+app.post("/api/v1/ingest", response_model=ArticleIngestResponse, status_code=status.HTTP_201_CREATED)(ingest_article)
+
 
 
 

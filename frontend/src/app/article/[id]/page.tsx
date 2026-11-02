@@ -467,7 +467,7 @@ export default function ReaderPage() {
           <h3 className="text-lg font-bold text-foreground">Reader loading failed</h3>
           <p className="text-foreground/60 text-sm mt-2 mb-6">{error || 'Article not found.'}</p>
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-semibold rounded-full text-sm transition-colors duration-200 shadow-md"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -556,7 +556,7 @@ export default function ReaderPage() {
               </span>
             )}
             <Link 
-              href="/"
+              href="/dashboard"
               title="Library"
               onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
               className={`flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer`}
@@ -597,7 +597,7 @@ export default function ReaderPage() {
               </span>
             )}
             <Link 
-              href="/"
+              href="/dashboard"
               title="All Articles"
               onClick={(e) => { if (!isLeftExpanded) { e.preventDefault(); setIsLeftExpanded(true); } }}
               className={`flex items-center ${isLeftExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer`}

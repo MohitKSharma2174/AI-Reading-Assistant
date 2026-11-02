@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null;
@@ -28,6 +28,29 @@ const getAuthHeaders = (): Record<string, string> => {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
+function getAuthCandidateUrls(endpoint: string): string[] {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const candidates: string[] = [];
+
+  // Configured API_BASE_URL
+  if (API_BASE_URL) {
+    const cleanBase = API_BASE_URL.replace(/\/+$/, '');
+    candidates.push(`${cleanBase}${cleanEndpoint}`);
+  }
+
+  // Next.js relative rewrites
+  candidates.push(`/api/v1${cleanEndpoint}`);
+  candidates.push(`/api${cleanEndpoint}`);
+
+  // Direct 127.0.0.1 & localhost fallbacks
+  candidates.push(`http://127.0.0.1:8000/api/v1${cleanEndpoint}`);
+  candidates.push(`http://localhost:8000/api/v1${cleanEndpoint}`);
+  candidates.push(`http://127.0.0.1:8000/api${cleanEndpoint}`);
+  candidates.push(`http://localhost:8000/api${cleanEndpoint}`);
+
+  return Array.from(new Set(candidates));
+}
 
 export interface User {
   id: number;
@@ -61,71 +84,130 @@ export interface Article {
 /* AUTH API CALLS */
 
 export async function signup(email: string, password: string): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
+  const candidateUrls = getAuthCandidateUrls('/auth/signup');
+  let lastErrorDetail = '';
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = 'Signup failed';
+  for (const url of candidateUrls) {
     try {
-      const parsed = JSON.parse(errText);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      let detail = 'Signup failed';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || detail;
+      } catch {}
+
+      if (response.status === 400 || response.status === 409) {
+        throw new Error(detail);
+      }
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail;
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('exists') || err.message.includes('characters') || err.message.includes('cannot be empty'))) {
+        throw err;
+      }
+      lastErrorDetail = err.message || lastErrorDetail;
+      continue;
+    }
   }
 
-  return response.json();
+  throw new Error(lastErrorDetail || 'Unable to connect to server for signup. Please try again.');
 }
 
 export async function login(email: string, password: string): Promise<{ access_token: string; token_type: string }> {
-  const bodyParams = new URLSearchParams({
-    username: email,
-    password: password,
-  });
+  const candidateUrls = getAuthCandidateUrls('/auth/login');
+  let lastErrorDetail = '';
 
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: bodyParams,
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = 'Login failed';
+  for (const url of candidateUrls) {
     try {
-      const parsed = JSON.parse(errText);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
+      const bodyParams = new URLSearchParams({
+        username: email.trim(),
+        password: password,
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: bodyParams,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.access_token) {
+          setToken(data.access_token);
+        }
+        return data;
+      }
+
+      const errText = await response.text();
+      let detail = 'Login failed';
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed.detail || detail;
+      } catch {}
+
+      if (response.status === 401 || response.status === 400) {
+        throw new Error(detail);
+      }
+
+      if (response.status !== 404) {
+        lastErrorDetail = detail;
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('Incorrect') || err.message.includes('password') || err.message.includes('required'))) {
+        throw err;
+      }
+      lastErrorDetail = err.message || lastErrorDetail;
+      continue;
+    }
   }
 
-  const data = await response.json();
-  if (data.access_token) {
-    setToken(data.access_token);
-  }
-  return data;
+  throw new Error(lastErrorDetail || 'Unable to connect to authentication server. Please verify backend is running.');
 }
 
 export async function getCurrentUser(): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    method: 'GET',
-    headers: {
-      ...getAuthHeaders(),
-    },
-  });
+  const candidateUrls = getAuthCandidateUrls('/auth/me');
 
-  if (!response.ok) {
-    throw new Error('Failed to authenticate session');
+  for (const url of candidateUrls) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Failed to authenticate session');
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Failed to authenticate session')) {
+        throw err;
+      }
+      continue;
+    }
   }
 
-  return response.json();
+  throw new Error('Failed to authenticate session');
 }
 
 /* ARTICLES API CALLS */

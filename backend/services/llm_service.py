@@ -146,8 +146,8 @@ def summarize_passage(context: str) -> str:
 
 
 def generate_summary(text: str) -> List[str]:
-    """Generate 3-5 concise bullet points summarizing text with safe truncation and error handling."""
-    safe_text = (text or "").strip()[:3000]
+    """Generate 3-5 concise bullet points summarizing text with smart truncation (:40000) and error handling."""
+    safe_text = (text or "").strip()[:40000]
 
     if IS_MOCK or llm is None:
         sentences = [s.strip() for s in re.split(r'[.!?]\s+', safe_text) if len(s.strip()) > 20]
@@ -190,8 +190,8 @@ def generate_summary(text: str) -> List[str]:
 
 
 def generate_tags(text: str) -> List[str]:
-    """Generate exactly 3 relevant topic tags with safe truncation and error handling."""
-    safe_text = (text or "").strip()[:3000]
+    """Generate exactly 3 relevant topic tags with smart truncation (:40000) and error handling."""
+    safe_text = (text or "").strip()[:40000]
 
     if IS_MOCK or llm is None:
         text_lower = safe_text.lower()

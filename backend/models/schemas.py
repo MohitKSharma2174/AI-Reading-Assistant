@@ -39,6 +39,10 @@ class ArticleIngestResponse(BaseModel):
     media_type: Optional[str] = "article"
     created_at: datetime
     already_existed: bool = False
+    content: Optional[str] = None
+    clean_content: Optional[str] = None
+    summary: Optional[SummaryResponse] = None
+    tags: Optional[List[TagResponse]] = []
 
     model_config = ConfigDict(from_attributes=True)
 

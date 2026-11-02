@@ -27,21 +27,37 @@ async def get_youtube_title(video_id: str) -> str:
         pass
     return f"YouTube Video {video_id}"
 
-def clean_youtube_transcript(transcript_list) -> str:
-    """Combine transcript entries into paragraphs."""
+# Ensure YouTubeTranscriptApi.get_transcript compatibility across all versions
+def _fetch_transcript_compat(vid: str):
+    try:
+        res = YouTubeTranscriptApi().fetch(vid)
+        if hasattr(res, "to_raw_data"):
+            return res.to_raw_data()
+        return list(res)
+    except AttributeError:
+        return YouTubeTranscriptApi.get_transcript(vid)
+
+if not hasattr(YouTubeTranscriptApi, "get_transcript"):
+    YouTubeTranscriptApi.get_transcript = staticmethod(_fetch_transcript_compat)
+
+def clean_youtube_transcript(transcript_list, chunk_size: int = 6) -> str:
+    """Combine transcript entries into paragraphs (group every 5-7 segments joined with spaces, separated by double newlines)."""
     text_items = []
     for entry in transcript_list:
         if isinstance(entry, dict):
-            text_items.append(entry.get("text", ""))
+            raw = entry.get("text", "")
         else:
-            text_items.append(getattr(entry, "text", ""))
+            raw = getattr(entry, "text", str(entry))
+        cleaned = raw.strip().replace("\n", " ")
+        if cleaned:
+            text_items.append(cleaned)
             
-    # Simple formatting: group entries into chunks of 30 items as 'paragraphs'
+    # Group every 5-7 segments (default 6) into paragraphs separated by \n\n
     paragraphs = []
-    chunk_size = 30
     for i in range(0, len(text_items), chunk_size):
-        paragraph = " ".join(text_items[i:i + chunk_size])
-        paragraphs.append(paragraph)
+        paragraph = " ".join(text_items[i:i + chunk_size]).strip()
+        if paragraph:
+            paragraphs.append(paragraph)
     return "\n\n".join(paragraphs)
 
 async def extract_youtube(url: str) -> dict:

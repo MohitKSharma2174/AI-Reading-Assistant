@@ -3,15 +3,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   BookOpen, Library, Plus, BookMarked, User as UserIcon, LogOut,
-  Sun, Moon, Eye, BookText, Trash2, RefreshCw, AlertCircle, Search, 
+  Sun, Moon, Eye, BookText, Trash2, RefreshCw, AlertCircle, Search,
   Sparkles, Bookmark, ArrowRight, X, Globe, BarChart2
 } from 'lucide-react';
 import { getVocabulary, deleteVocabulary, VocabularyItem } from '../../lib/api';
 import { useTheme } from '../../lib/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import UrlInputBar from '../../components/UrlInputBar';
+import Sidebar from '../../components/Sidebar';
 
 export default function VocabularyPage() {
   const router = useRouter();
@@ -98,151 +99,14 @@ export default function VocabularyPage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground font-sans transition-colors duration-300 overflow-hidden">
-      
-      {/* 1. LEFT SIDEBAR (Mirrors Library page, Vocabulary highlighted as active) */}
-      <aside className="w-64 bg-foreground/[0.02] border-r border-foreground/5 flex flex-col h-full shrink-0 select-none">
-        {/* Header Title */}
-        <div className="p-6 border-b border-foreground/5">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200">
-              <BookOpen className="w-4.5 h-4.5 text-slate-100" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-foreground text-base tracking-tight leading-none">
-                AARC
-              </span>
-              <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-widest mt-0.5">
-                Reading Companion
-              </span>
-            </div>
-          </Link>
-        </div>
 
-        {/* Navigation Section */}
-        <div className="flex-1 py-6 px-4 space-y-7 overflow-y-auto">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Discover
-            </span>
-            <Link 
-              href="/"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              <Library className="w-4 h-4 text-indigo-500" />
-              <span>Library</span>
-            </Link>
-            <Link 
-              href="/vocabulary"
-              className="flex items-center gap-3 px-3 py-2 bg-indigo-600/10 text-indigo-400 font-bold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              <BookText className="w-4 h-4" />
-              <span>Vocabulary</span>
-            </Link>
-            <button
-              onClick={() => setIsIngestOpen(true)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors text-left cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-indigo-500" />
-              <span>Ingest Link</span>
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-foreground/40 uppercase tracking-widest px-3 block mb-2">
-              Saved Archives
-            </span>
-            <Link 
-              href="/"
-              className="flex items-center gap-3 px-3 py-2 text-foreground/60 hover:text-foreground hover:bg-foreground/5 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              <BookMarked className="w-4 h-4 text-indigo-500" />
-              <span>All Articles</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Bottom Theme Selector Dock */}
-        <div className="p-3 border-t border-foreground/5 bg-foreground/[0.015]">
-          <div className="flex items-center justify-between px-1 mb-1.5">
-            <span className="text-[10px] font-bold text-foreground/45 uppercase tracking-widest">
-              Theme
-            </span>
-            <span className="text-[10px] font-semibold text-foreground/40 capitalize">
-              {theme}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-1 p-1 bg-foreground/[0.03] border border-foreground/10 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setTheme('light')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-background text-foreground shadow-2xs font-bold border border-foreground/15'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Light theme"
-            >
-              <Sun className="w-3.5 h-3.5" />
-              <span>Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('sepia')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'sepia'
-                  ? 'bg-[#F5EFE6] text-[#3B2F2F] shadow-2xs font-bold border border-[#3B2F2F]/20'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Sepia theme"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Sepia</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme('dark')}
-              className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-slate-900 text-slate-100 shadow-2xs font-bold border border-slate-700'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5 border border-transparent'
-              }`}
-              title="Dark theme"
-            >
-              <Moon className="w-3.5 h-3.5" />
-              <span>Dark</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom User Profile & Logout Section */}
-        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 font-bold shrink-0">
-              <UserIcon className="w-4 h-4" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-bold text-xs text-foreground truncate">
-                {user ? user.email.split('@')[0] : 'System Reader'}
-              </span>
-              <span className="text-[9px] text-foreground/45 truncate">
-                {user ? user.email : 'Online'}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="p-1.5 hover:bg-red-500/10 text-foreground/40 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-            title="Log Out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </aside>
+      {/* 1. LEFT SIDEBAR */}
+      <Sidebar onIngestClick={() => setIsIngestOpen(true)} />
 
       {/* 2. CENTER CANVAS */}
       <main className="flex-1 flex flex-col h-full bg-background overflow-y-auto">
         <div className="max-w-[840px] w-full mx-auto px-6 py-12 md:py-16 flex flex-col">
-          
+
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 mb-8 pb-6 border-b border-foreground/10">
             <div>
@@ -253,7 +117,7 @@ export default function VocabularyPage() {
                 Your saved jargon and AI definitions.
               </p>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
                 onClick={handleManualSync}
@@ -338,7 +202,7 @@ export default function VocabularyPage() {
                 Highlight words in any article to build your vocabulary.
               </p>
               <Link
-                href="/"
+                href="/dashboard"
                 className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-slate-100 rounded-xl text-xs font-bold transition-colors shadow-sm"
               >
                 <span>Read Articles in Library</span>
@@ -448,7 +312,7 @@ export default function VocabularyPage() {
       {isIngestOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative animate-scaleUp text-slate-100">
-            <button 
+            <button
               onClick={() => setIsIngestOpen(false)}
               className="absolute top-4 right-4 p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-100 cursor-pointer"
             >
