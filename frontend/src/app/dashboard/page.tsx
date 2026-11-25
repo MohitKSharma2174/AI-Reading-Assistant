@@ -1,24 +1,20 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { 
   Clock, Tag as TagIcon, Trash2, BookOpen, AlertCircle, RefreshCw, 
-  ChevronRight, Plus, Library, Sparkles, BookMarked, User as UserIcon, X, Globe, BarChart2, LogOut,
-  Sun, Moon, Eye, BookText, PlayCircle, FileText, Search
+  ChevronRight, Sparkles, X, Globe, BarChart2, PlayCircle, FileText
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { getArticles, deleteArticle, Article } from '../../lib/api';
+import { getArticles, deleteArticle, getToken, Article } from '../../lib/api';
 import UrlInputBar from '../../components/UrlInputBar';
 import Sidebar from '../../components/Sidebar';
-import { useTheme } from '../../lib/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { openCommandPalette } from '../../components/CommandPalette';
 
 export default function LibraryPage() {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [tagsList, setTagsList] = useState<string[]>([]);
@@ -37,7 +33,8 @@ export default function LibraryPage() {
     }
   }, [isAuthenticated, authLoading, router]);
 
-  const fetchArticlesData = async (tagFilter: string | null = null) => {
+  const fetchArticlesData = useCallback(async (tagFilter: string | null = null) => {
+    if (authLoading || !isAuthenticated || !getToken()) return;
     setLoading(true);
     setError('');
     try {
@@ -52,16 +49,52 @@ export default function LibraryPage() {
         });
         setTagsList(Array.from(tags));
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load articles.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load articles.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
-    fetchArticlesData(selectedTag);
-  }, [selectedTag]);
+    if (authLoading || !isAuthenticated) return;
+    if (!getToken()) return;
+
+    let ignore = false;
+    getArticles(selectedTag || undefined)
+      .then((fetchedArticles) => {
+        if (ignore) return;
+        setArticles(fetchedArticles);
+        setError('');
+
+        if (!selectedTag) {
+          const tags = new Set<string>();
+          fetchedArticles.forEach((art) => {
+            art.tags.forEach((t) => tags.add(t.name));
+          });
+          setTagsList(Array.from(tags));
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : 'Failed to load articles.');
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [authLoading, isAuthenticated, selectedTag]);
+
+  const handleSelectTag = (tag: string | null) => {
+    setLoading(true);
+    setSelectedTag(tag);
+  };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -77,14 +110,13 @@ export default function LibraryPage() {
         art.tags.forEach((t) => tags.add(t.name));
       });
       setTagsList(Array.from(tags));
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete article.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete article.');
     }
   };
 
   // Metrics for Right Sidebar
   const totalReadingTime = articles.reduce((acc, art) => acc + (art.reading_time || 1), 0);
-  const averageReadingTime = articles.length > 0 ? Math.round(totalReadingTime / articles.length) : 0;
 
   // Filter items by active tab (all / article / video)
   const filteredItems = articles.filter((item) =>
@@ -95,7 +127,7 @@ export default function LibraryPage() {
     <div className="flex h-screen bg-background text-foreground font-sans transition-colors duration-300 overflow-hidden">
       
       {/* 1. LEFT SIDEBAR */}
-      <Sidebar onIngestClick={() => setIsIngestOpen(true)} onSelectTag={setSelectedTag} />
+      <Sidebar onIngestClick={() => setIsIngestOpen(true)} onSelectTag={handleSelectTag} />
 
       {/* 2. CENTER CANVAS (Flex-1, Reading columns feed list) */}
       <main className="flex-1 flex flex-col h-full bg-background overflow-y-auto">
@@ -129,7 +161,7 @@ export default function LibraryPage() {
                 </span>
               </div>
               <button 
-                onClick={() => setSelectedTag(null)}
+                onClick={() => handleSelectTag(null)}
                 className="text-foreground/40 hover:text-foreground text-[10px] font-bold uppercase tracking-wider cursor-pointer"
               >
                 Clear Filter
@@ -351,7 +383,7 @@ export default function LibraryPage() {
               {tagsList.map((tag) => (
                 <button
                   key={tag}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                  onClick={() => handleSelectTag(selectedTag === tag ? null : tag)}
                   className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
                     selectedTag === tag
                       ? 'bg-indigo-600 border-indigo-500 text-slate-100 shadow-sm'

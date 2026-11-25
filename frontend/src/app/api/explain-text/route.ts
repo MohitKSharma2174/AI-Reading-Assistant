@@ -38,22 +38,31 @@ export async function POST(req: NextRequest) {
 
     const backendEndpoints = Array.from(new Set(endpoints));
 
+    const authHeader = req.headers.get('authorization');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    };
+
     for (const endpoint of backendEndpoints) {
       try {
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(req.headers.get('authorization')
-              ? { Authorization: req.headers.get('authorization')! }
-              : {}),
-          },
+          headers,
           body: JSON.stringify({ selected_text }),
         });
 
         if (response.ok) {
           const data = await response.json();
           return NextResponse.json(data);
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          const errText = await response.text();
+          return new NextResponse(errText, {
+            status: response.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
       } catch {
         continue;
@@ -64,9 +73,10 @@ export async function POST(req: NextRequest) {
       { detail: 'Backend AI explanation service could not be reached.' },
       { status: 502 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : 'Internal proxy error';
     return NextResponse.json(
-      { detail: error.message || 'Internal proxy error' },
+      { detail },
       { status: 500 }
     );
   }

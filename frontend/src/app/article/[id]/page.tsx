@@ -165,21 +165,24 @@ export default function ReaderPage() {
     };
   }, [cleanText, highlight]);
 
-  const fetchArticleDetails = async () => {
+  const isInvalidId = Number.isNaN(id);
+
+  const fetchArticleDetails = useCallback(async () => {
+    if (isInvalidId || authLoading || !isAuthenticated) return;
     setLoading(true);
     setError('');
     try {
       const art = await getArticle(id);
       setArticle(art);
-      
+
       const hlList = await getHighlights(id);
       setHighlights(hlList);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load article.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load article.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, isInvalidId, authLoading, isAuthenticated]);
 
   // Protect Route: Redirect to /login if unauthenticated
   useEffect(() => {
@@ -189,15 +192,31 @@ export default function ReaderPage() {
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isNaN(id)) {
-      setError('Invalid ID');
-      setLoading(false);
-      return;
-    }
-    if (isAuthenticated) {
-      fetchArticleDetails();
-    }
-  }, [id, isAuthenticated]);
+    if (isInvalidId || authLoading || !isAuthenticated) return;
+
+    let ignore = false;
+    Promise.all([getArticle(id), getHighlights(id)])
+      .then(([art, hlList]) => {
+        if (ignore) return;
+        setArticle(art);
+        setHighlights(hlList);
+        setError('');
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : 'Failed to load article.');
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [id, isInvalidId, authLoading, isAuthenticated]);
 
   // Selection Handler for Jargon Buster Magic Tooltip
   const handleMouseUp = async (e: React.MouseEvent) => {
@@ -267,14 +286,14 @@ export default function ReaderPage() {
           error: '',
         };
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTooltipState((prev) => {
         if (!prev.visible || prev.text !== text) return prev;
         return {
           ...prev,
           loading: false,
           result: '',
-          error: err.message || 'Failed to explain text. Please try again.',
+          error: err instanceof Error ? err.message : 'Failed to explain text. Please try again.',
         };
       });
     }
@@ -309,8 +328,9 @@ export default function ReaderPage() {
     try {
       const res = await summarizePassageAI(id, { context: selectedText });
       setNoteText(res.summary);
-    } catch (err: any) {
-      setNoteText(`[Summary failed: ${err.message || 'Could not generate summary.'}]`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not generate summary.';
+      setNoteText(`[Summary failed: ${msg}]`);
     } finally {
       setSummarizeLoading(false);
     }
@@ -330,8 +350,8 @@ export default function ReaderPage() {
       window.getSelection()?.removeAllRanges();
       setNoteText('');
       setSelectedText('');
-    } catch (err: any) {
-      alert(err.message || 'Failed to save highlight.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to save highlight.');
     }
   };
 
@@ -363,8 +383,8 @@ export default function ReaderPage() {
         context: currentCtx || (article?.clean_content ? article.clean_content.slice(0, 2000) : ''),
       });
       setChatHistory((prev) => [...prev, { role: 'assistant', content: result.answer, context: currentCtx }]);
-    } catch (err: any) {
-      setAiError(err.message || 'Failed to get AI response. Please try again.');
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : 'Failed to get AI response. Please try again.');
     } finally {
       setAiLoading(false);
     }
@@ -378,8 +398,8 @@ export default function ReaderPage() {
         color: 'blue'
       });
       setHighlights((prev) => [...prev, newHl]);
-    } catch (err: any) {
-      alert(err.message || 'Failed to save AI response.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to save AI response.');
     }
   };
 
@@ -388,8 +408,8 @@ export default function ReaderPage() {
     try {
       await deleteHighlight(hlId);
       setHighlights((prev) => prev.filter((h) => h.id !== hlId));
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete highlight.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete highlight.');
     }
   };
 
@@ -450,7 +470,9 @@ export default function ReaderPage() {
     );
   };
 
-  if (loading) {
+  const effectiveError = isInvalidId ? 'Invalid ID' : error;
+
+  if (!isInvalidId && loading) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-3 font-sans transition-colors duration-300">
         <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -459,13 +481,13 @@ export default function ReaderPage() {
     );
   }
 
-  if (error || !article) {
+  if (effectiveError || !article) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 font-sans transition-colors duration-300">
         <div className="max-w-md w-full text-center bg-foreground/5 border border-foreground/10 rounded-2xl p-8 shadow-md">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-foreground">Reader loading failed</h3>
-          <p className="text-foreground/60 text-sm mt-2 mb-6">{error || 'Article not found.'}</p>
+          <p className="text-foreground/60 text-sm mt-2 mb-6">{effectiveError || 'Article not found.'}</p>
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-semibold rounded-full text-sm transition-colors duration-200 shadow-md"
@@ -903,7 +925,7 @@ export default function ReaderPage() {
                 </button>
               </div>
               <p className="text-foreground/70 italic text-[11px] leading-relaxed line-clamp-3">
-                "{activeHighlight}"
+                &ldquo;{activeHighlight}&rdquo;
               </p>
             </div>
           )}
@@ -1003,7 +1025,7 @@ export default function ReaderPage() {
                   </div>
                   {msg.context && msg.role === 'user' && (
                     <p className="text-[10px] text-foreground/45 italic line-clamp-1 border-l-2 border-indigo-400/40 pl-1.5">
-                      "{msg.context}"
+                      &ldquo;{msg.context}&rdquo;
                     </p>
                   )}
                   <p className="text-foreground/80 leading-relaxed whitespace-pre-line">
@@ -1034,7 +1056,7 @@ export default function ReaderPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => aiInputRef.current?.focus()}
+                  onClick={triggerAskAI}
                   className="px-2.5 py-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   💬 Ask AI
@@ -1127,7 +1149,7 @@ export default function ReaderPage() {
                         </button>
                       </div>
                       <p className="text-xs italic text-foreground/60 border-l border-foreground/15 pl-2 mb-1.5 line-clamp-3 leading-relaxed">
-                        "{hl.selected_text}"
+                        &ldquo;{hl.selected_text}&rdquo;
                       </p>
                       {hl.note && (
                         <div className="mt-2 pt-2 border-t border-foreground/5">
@@ -1231,8 +1253,8 @@ export default function ReaderPage() {
                   try {
                     await saveVocabulary(tooltipState.text, tooltipState.result);
                     setTooltipState((prev) => ({ ...prev, saved: true }));
-                  } catch (err: any) {
-                    alert(err.message || 'Failed to save to vocabulary.');
+                  } catch (err: unknown) {
+                    alert(err instanceof Error ? err.message : 'Failed to save to vocabulary.');
                   }
                 }}
                 className={`absolute top-0 right-0 p-1 rounded-md transition-colors cursor-pointer ${

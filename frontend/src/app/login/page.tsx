@@ -42,8 +42,8 @@ export default function LoginPage() {
       setTimeout(() => {
         router.push('/dashboard');
       }, 600);
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }

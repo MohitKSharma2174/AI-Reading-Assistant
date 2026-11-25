@@ -19,7 +19,11 @@ async def create_highlight(
 ):
     """Create a text highlight and optional note linked to an article accessible to current_user."""
     try:
-        article = db.query(Article).filter(Article.id == article_id).first()
+        article = (
+            db.query(Article)
+            .filter(Article.id == article_id, Article.user_id == current_user.id)
+            .first()
+        )
 
         if not article:
             raise HTTPException(
@@ -60,8 +64,12 @@ async def get_highlights(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Fetch all highlights and notes for a specific article accessible to current_user."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    """Fetch all highlights and notes for a specific article owned by current_user."""
+    article = (
+        db.query(Article)
+        .filter(Article.id == article_id, Article.user_id == current_user.id)
+        .first()
+    )
 
     if not article:
         raise HTTPException(
@@ -69,7 +77,7 @@ async def get_highlights(
             detail=f"Article with ID {article_id} not found."
         )
 
-    highlights = db.query(Highlight).filter(Highlight.article_id == article_id).all()
+    highlights = db.query(Highlight).filter(Highlight.article_id == article.id).all()
     return highlights
 
 @router.delete("/highlights/{highlight_id}", status_code=status.HTTP_200_OK)
@@ -78,9 +86,14 @@ async def delete_highlight(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a highlight by ID."""
+    """Delete a highlight by ID if owned by current_user."""
     try:
-        highlight = db.query(Highlight).filter(Highlight.id == highlight_id).first()
+        highlight = (
+            db.query(Highlight)
+            .join(Article, Highlight.article_id == Article.id)
+            .filter(Highlight.id == highlight_id, Article.user_id == current_user.id)
+            .first()
+        )
         if not highlight:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

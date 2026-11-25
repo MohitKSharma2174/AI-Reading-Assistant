@@ -24,13 +24,15 @@ function Youtube({ className = "w-6 h-6", ...props }: React.SVGProps<SVGSVGEleme
 }
 
 export default function HeroAnimator() {
-  const [phase, setPhase] = useState(0);
-  const [deviceIndex, setDeviceIndex] = useState(0);
+  const [{ phase, deviceIndex }, setAnimState] = useState({ phase: 0, deviceIndex: 0 });
 
   // Cycle phases 0, 1, 2 every 2.5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
-      setPhase((prev) => (prev + 1) % 3);
+      setAnimState((prev) => ({
+        phase: (prev.phase + 1) % 3,
+        deviceIndex: 0,
+      }));
     }, 2500);
     return () => clearInterval(timer);
   }, []);
@@ -43,12 +45,12 @@ export default function HeroAnimator() {
   ];
 
   useEffect(() => {
-    if (phase !== 2) {
-      setDeviceIndex(0);
-      return;
-    }
+    if (phase !== 2) return;
     const deviceTimer = setInterval(() => {
-      setDeviceIndex((prev) => (prev + 1) % 3);
+      setAnimState((prev) => ({
+        ...prev,
+        deviceIndex: (prev.deviceIndex + 1) % 3,
+      }));
     }, 800);
     return () => clearInterval(deviceTimer);
   }, [phase]);

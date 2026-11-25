@@ -21,7 +21,7 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
     // Basic URL validation
     try {
       new URL(url);
-    } catch (_) {
+    } catch {
       setStatus('error');
       setErrorMessage('Please enter a valid absolute URL (e.g., https://example.com).');
       return;
@@ -48,9 +48,9 @@ export default function UrlInputBar({ onIngestSuccess }: UrlInputBarProps) {
           window.location.reload();
         }
       }, 2200);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error');
-      setErrorMessage(err.message || 'Failed to ingest URL.');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to ingest URL.');
     }
   };
 

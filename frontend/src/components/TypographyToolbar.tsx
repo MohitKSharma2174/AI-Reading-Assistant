@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Sliders, ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface TypographyConfig {
@@ -49,6 +49,85 @@ const DEFAULT_CONFIG: TypographyConfig = {
   height: '2.0',
 };
 
+let cachedRawTypo: string | null = null;
+let cachedParsedTypo: TypographyConfig = DEFAULT_CONFIG;
+const typoListeners = new Set<() => void>();
+
+function parseTypographyConfig(raw: string | null): TypographyConfig {
+  if (!raw) return DEFAULT_CONFIG;
+  if (raw === cachedRawTypo) return cachedParsedTypo;
+  try {
+    const parsed = JSON.parse(raw);
+    const validIndex =
+      typeof parsed.sizeIndex === 'number' &&
+      parsed.sizeIndex >= 0 &&
+      parsed.sizeIndex < FONT_SIZE_STEPS.length
+        ? parsed.sizeIndex
+        : 2;
+    const validLineHeight: 'compact' | 'comfort' | 'loose' =
+      ['compact', 'comfort', 'loose'].includes(parsed.lineHeight) ? parsed.lineHeight : 'loose';
+    const validTracking: 'default' | 'wide' =
+      ['default', 'wide'].includes(parsed.tracking) ? parsed.tracking : 'default';
+    const validFont: 'font-sans' | 'font-serif' =
+      parsed.font === 'font-serif' ? 'font-serif' : 'font-sans';
+
+    cachedRawTypo = raw;
+    cachedParsedTypo = {
+      font: validFont,
+      sizeIndex: validIndex,
+      sizeClass: FONT_SIZE_STEPS[validIndex].class,
+      lineHeight: validLineHeight,
+      lineHeightClass: LINE_HEIGHT_MAP[validLineHeight],
+      tracking: validTracking,
+      trackingClass: TRACKING_MAP[validTracking],
+      size: FONT_SIZE_STEPS[validIndex].class,
+      height: validLineHeight === 'compact' ? '1.5' : validLineHeight === 'comfort' ? '1.75' : '2.0',
+    };
+    return cachedParsedTypo;
+  } catch {
+    return DEFAULT_CONFIG;
+  }
+}
+
+function getStoredTypography(): TypographyConfig {
+  if (typeof window === 'undefined') return DEFAULT_CONFIG;
+  try {
+    return parseTypographyConfig(localStorage.getItem(TYPO_STORAGE_KEY));
+  } catch {
+    return DEFAULT_CONFIG;
+  }
+}
+
+function getServerTypographySnapshot(): TypographyConfig {
+  return DEFAULT_CONFIG;
+}
+
+function subscribeTypography(callback: () => void): () => void {
+  typoListeners.add(callback);
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === TYPO_STORAGE_KEY) {
+      callback();
+    }
+  };
+  window.addEventListener('storage', handleStorage);
+  return () => {
+    typoListeners.delete(callback);
+    window.removeEventListener('storage', handleStorage);
+  };
+}
+
+function writeStoredTypography(updated: TypographyConfig): void {
+  const serialized = JSON.stringify(updated);
+  cachedRawTypo = serialized;
+  cachedParsedTypo = updated;
+  try {
+    localStorage.setItem(TYPO_STORAGE_KEY, serialized);
+  } catch {
+    // Ignore storage write errors
+  }
+  typoListeners.forEach((listener) => listener());
+}
+
 interface TypographyToolbarProps {
   onChange: (config: TypographyConfig) => void;
 }
@@ -62,53 +141,21 @@ export default function TypographyToolbar({ onChange }: TypographyToolbarProps) 
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  const [config, setConfig] = useState<TypographyConfig>(DEFAULT_CONFIG);
+  const config = useSyncExternalStore(
+    subscribeTypography,
+    getStoredTypography,
+    getServerTypographySnapshot
+  );
 
-  // Load saved preferences on mount
+  // Notify parent when config is loaded or updated
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(TYPO_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const validIndex = typeof parsed.sizeIndex === 'number' && parsed.sizeIndex >= 0 && parsed.sizeIndex < FONT_SIZE_STEPS.length
-          ? parsed.sizeIndex
-          : 2;
-        const validLineHeight: 'compact' | 'comfort' | 'loose' =
-          ['compact', 'comfort', 'loose'].includes(parsed.lineHeight) ? parsed.lineHeight : 'loose';
-        const validTracking: 'default' | 'wide' =
-          ['default', 'wide'].includes(parsed.tracking) ? parsed.tracking : 'default';
-        const validFont: 'font-sans' | 'font-serif' =
-          parsed.font === 'font-serif' ? 'font-serif' : 'font-sans';
-
-        const loaded: TypographyConfig = {
-          font: validFont,
-          sizeIndex: validIndex,
-          sizeClass: FONT_SIZE_STEPS[validIndex].class,
-          lineHeight: validLineHeight,
-          lineHeightClass: LINE_HEIGHT_MAP[validLineHeight],
-          tracking: validTracking,
-          trackingClass: TRACKING_MAP[validTracking],
-          size: FONT_SIZE_STEPS[validIndex].class,
-          height: validLineHeight === 'compact' ? '1.5' : validLineHeight === 'comfort' ? '1.75' : '2.0',
-        };
-
-        setConfig(loaded);
-        onChangeRef.current(loaded);
-      } else {
-        onChangeRef.current(DEFAULT_CONFIG);
-      }
-    } catch (_) {
-      onChangeRef.current(DEFAULT_CONFIG);
-    }
-  }, []);
+    onChangeRef.current(config);
+  }, [config]);
 
   const updateConfig = (patch: Partial<TypographyConfig>) => {
     const updated: TypographyConfig = { ...config, ...patch };
-    setConfig(updated);
+    writeStoredTypography(updated);
     onChangeRef.current(updated);
-    try {
-      localStorage.setItem(TYPO_STORAGE_KEY, JSON.stringify(updated));
-    } catch (_) {}
   };
 
   const handleSizeChange = (newIndex: number) => {

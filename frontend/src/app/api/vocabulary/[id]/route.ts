@@ -103,9 +103,9 @@ export async function DELETE(
       { detail: `Vocabulary item with ID ${id} not found.` },
       { status: 404 }
     );
-  } catch (error: any) {
-    const msg = error?.message || 'Internal proxy error';
-    if (typeof msg === 'string' && msg.toLowerCase().includes('fetch failed')) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Internal proxy error';
+    if (msg.toLowerCase().includes('fetch failed')) {
       return NextResponse.json(
         { detail: 'Backend vocabulary service is currently unreachable. Please verify that the FastAPI backend server is running on http://127.0.0.1:8000.' },
         { status: 503 }

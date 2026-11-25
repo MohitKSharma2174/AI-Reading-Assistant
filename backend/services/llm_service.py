@@ -3,6 +3,7 @@ LLM Service Module
 Provides access to Groq LLM pipelines with token limit safety nets and SQLite lock prevention.
 """
 
+import logging
 import os
 import re
 from typing import List, Optional
@@ -14,11 +15,15 @@ load_dotenv()
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 
+logger = logging.getLogger(__name__)
 
 # Standard fallback message for 429 and token/context limit errors
 TOKEN_LIMIT_FALLBACK = (
     "The selected text is too long for the current AI token limit. Please select a smaller section."
 )
+
+# Configurable Groq model with sensible default
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # Initialize Groq LLM dynamically
 llm = None
@@ -28,19 +33,19 @@ if groq_key:
     try:
         llm = ChatGroq(
             temperature=0,
-            model="qwen/qwen3.8-27b",
+            model=GROQ_MODEL,
             max_tokens=300,
             groq_api_key=groq_key
         )
     except Exception as e:
-        print(f"Warning: Failed to initialize ChatGroq: {e}")
+        logger.exception("Failed to initialize ChatGroq (model=%s): %s", GROQ_MODEL, e)
 
 
 IS_MOCK = (llm is None)
 if IS_MOCK:
-    print("LLM Service initialized: Using Mock Fallback Engine.")
+    logger.info("LLM Service initialized: Using Mock Fallback Engine.")
 else:
-    print("LLM Service initialized: Using Live Groq LLM Engine.")
+    logger.info("LLM Service initialized: Using Live Groq LLM Engine (model=%s).", GROQ_MODEL)
 
 
 def is_token_or_rate_limit_error(e: Exception) -> bool:
@@ -100,11 +105,10 @@ def ask_ai(question: str, context: Optional[str] = None, article_content: str = 
         response = chain.invoke({"passage": highlighted_text, "question": safe_question})
         return response.content.strip()
     except Exception as e:
-        print(f"ask_ai error: {e}")
+        logger.exception("ask_ai Groq call failed (model=%s): %s", GROQ_MODEL, e)
         if is_token_or_rate_limit_error(e):
             return TOKEN_LIMIT_FALLBACK
-        # If it's a Groq API status error, still return graceful fallback to avoid breaking UI
-        return TOKEN_LIMIT_FALLBACK
+        return "Unable to answer right now due to an AI service error. Please try again shortly."
 
 
 def summarize_highlight(context: str = "", highlighted_text: str = "") -> str:
@@ -134,10 +138,10 @@ def summarize_highlight(context: str = "", highlighted_text: str = "") -> str:
         response = chain.invoke({"context": highlighted_text})
         return response.content.strip()
     except Exception as e:
-        print(f"summarize_highlight error: {e}")
+        logger.exception("summarize_highlight Groq call failed (model=%s): %s", GROQ_MODEL, e)
         if is_token_or_rate_limit_error(e):
             return TOKEN_LIMIT_FALLBACK
-        return TOKEN_LIMIT_FALLBACK
+        return "Unable to summarize this passage right now due to an AI service error. Please try again shortly."
 
 
 def summarize_passage(context: str) -> str:
@@ -183,7 +187,7 @@ def generate_summary(text: str) -> List[str]:
             return ["No summary bullets could be parsed from LLM output."]
         return bullets[:5]
     except Exception as e:
-        print(f"AI summary generation failed: {e}")
+        logger.exception("AI summary generation failed (model=%s): %s", GROQ_MODEL, e)
         if is_token_or_rate_limit_error(e):
             return ["The article content was too large for immediate full summarization. Please highlight specific passages for instant insights."]
         return ["Summary currently unavailable due to an AI processing error."]
@@ -238,7 +242,7 @@ def generate_tags(text: str) -> List[str]:
         tags = [t.strip() for t in raw_output.split(",") if t.strip()]
         return tags[:3]
     except Exception as e:
-        print(f"AI tag generation failed: {e}")
+        logger.exception("AI tag generation failed (model=%s): %s", GROQ_MODEL, e)
         if is_token_or_rate_limit_error(e):
             return ["General", "Reading", "AARC"]
         return ["General", "Reading", "AARC"]
@@ -292,7 +296,7 @@ def explain_text(selected_text: str) -> str:
         return response.content.strip()
 
     except Exception as e:
-        print(f"explain_text Groq error: {e}")
+        logger.exception("explain_text Groq error (model=%s): %s", GROQ_MODEL, e)
         return "Unable to explain this selection right now. Please try again."
 
 

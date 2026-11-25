@@ -1,13 +1,15 @@
 import os
 import re
 import math
+import logging
+from urllib.parse import urlparse
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_, cast, String as SqlString
+from sqlalchemy import or_, cast, func, String as SqlString
 from core.database import get_db
-from core.deps import get_current_user, get_optional_current_user
+from core.deps import get_current_user
 from models.schema import User, Article, Tag, Summary
 from models.schemas import (
     ArticleIngestRequest, ArticleIngestResponse,
@@ -28,6 +30,8 @@ from services.llm_service import (
 from youtube_transcript_api import YouTubeTranscriptApi
 from groq import Groq
 
+logger = logging.getLogger(__name__)
+
 # Initialize Groq client
 groq_api_key = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
@@ -46,9 +50,22 @@ if not hasattr(YouTubeTranscriptApi, "get_transcript"):
     YouTubeTranscriptApi.get_transcript = staticmethod(_fetch_transcript_compat)
 
 def extract_video_id(url: str) -> Optional[str]:
-    """Extract 11-character YouTube video ID using regex: r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'"""
+    r"""Extract 11-character YouTube video ID using regex: r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'"""
     match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
     return match.group(1) if match else None
+
+def _is_youtube_url(url: str) -> bool:
+    """Check whether the URL hostname belongs to YouTube."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+        return (
+            host == "youtube.com"
+            or host.endswith(".youtube.com")
+            or host == "youtu.be"
+            or host.endswith(".youtu.be")
+        )
+    except Exception:
+        return False
 
 def parse_summary_and_tags(output_text: str) -> tuple[List[str], List[str]]:
     """Parse Groq model response for 3 bullet points and comma-separated tags."""
@@ -94,8 +111,9 @@ def generate_groq_summary_and_tags(content_text: str) -> tuple[List[str], List[s
 
     raw_response = None
     if groq_client:
-        # Call Groq API using llama-3.1-8b-instant with fallback to available active models
-        models_to_try = ["llama-3.1-8b-instant", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+        # Call Groq API using configured model with fallback to available active models
+        primary_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+        models_to_try = list(dict.fromkeys([primary_model, "llama-3.1-8b-instant", "openai/gpt-oss-20b"]))
         for model_name in models_to_try:
             try:
                 resp = groq_client.chat.completions.create(
@@ -107,7 +125,8 @@ def generate_groq_summary_and_tags(content_text: str) -> tuple[List[str], List[s
                 raw_response = resp.choices[0].message.content
                 if raw_response:
                     break
-            except Exception:
+            except Exception as e:
+                logger.exception("Groq summary/tags generation failed for model %s: %s", model_name, e)
                 continue
 
     if not raw_response:
@@ -117,7 +136,7 @@ def generate_groq_summary_and_tags(content_text: str) -> tuple[List[str], List[s
                 "Primary topics and essential arguments summarized.",
                 "Automated AI processing successfully indexed this entry."
             ],
-            ["Insights", "Reading", "General"]
+            ["insights", "reading", "general"]
         )
 
     return parse_summary_and_tags(raw_response)
@@ -141,8 +160,12 @@ async def ingest_article(
     try:
         url_str = str(request.url)
 
-        # --- 1. Duplicate check: return existing article if URL already ingested ---
-        existing = db.query(Article).filter(Article.original_url == url_str).first()
+        # --- 1. Duplicate check: return existing article if URL already ingested for current_user ---
+        existing = (
+            db.query(Article)
+            .filter(Article.original_url == url_str, Article.user_id == current_user.id)
+            .first()
+        )
 
         if existing:
             return ArticleIngestResponse(
@@ -156,7 +179,7 @@ async def ingest_article(
             )
 
         # --- 2. Detect YouTube vs Web Article ---
-        is_youtube = "youtube.com" in url_str or "youtu.be" in url_str
+        is_youtube = _is_youtube_url(url_str)
 
         if is_youtube:
             # Extract video ID; raise 400 if invalid
@@ -239,9 +262,9 @@ async def ingest_article(
             )
             db.add(summary_obj)
 
-            # Save Groq-generated tags
+            # Save Groq-generated tags (normalised to lowercase)
             for t_name in tag_names:
-                t_clean = t_name.strip()
+                t_clean = t_name.strip().lower()
                 if not t_clean:
                     continue
                 tag_obj = db.query(Tag).filter(Tag.name == t_clean).first()
@@ -256,7 +279,11 @@ async def ingest_article(
             db.refresh(db_article)
         except IntegrityError:
             db.rollback()
-            existing = db.query(Article).filter(Article.original_url == url_str).first()
+            existing = (
+                db.query(Article)
+                .filter(Article.original_url == url_str, Article.user_id == current_user.id)
+                .first()
+            )
             if existing:
                 return ArticleIngestResponse(
                     id=existing.id,
@@ -268,7 +295,7 @@ async def ingest_article(
                     already_existed=True,
                 )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="Failed to save article due to a database conflict."
             )
         except Exception as e:
@@ -300,12 +327,12 @@ async def get_articles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve all articles accessible to current_user, optionally filtered by tag."""
-    query = db.query(Article)
+    """Retrieve all articles owned by current_user, optionally filtered by tag."""
+    query = db.query(Article).filter(Article.user_id == current_user.id)
     
     if tag:
         tag_lower = tag.strip().lower()
-        query = query.join(Article.tags).filter(Tag.name == tag_lower)
+        query = query.join(Article.tags).filter(func.lower(Tag.name) == tag_lower).distinct()
         
     articles = query.order_by(Article.created_at.desc()).all()
     return articles
@@ -315,9 +342,9 @@ async def get_articles(
 async def search_articles_route(
     q: str = Query("", description="Search query string"),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Search articles across title, content, and summary bullet points."""
+    """Search current_user's articles across title, content, and summary bullet points."""
     term = q.strip()
     if not term:
         return []
@@ -327,6 +354,7 @@ async def search_articles_route(
         db.query(Article)
         .outerjoin(Summary, Article.id == Summary.article_id)
         .filter(
+            Article.user_id == current_user.id,
             or_(
                 Article.title.ilike(search_pattern),
                 Article.clean_content.ilike(search_pattern),
@@ -355,8 +383,12 @@ async def get_article(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve a specific article by ID for current_user including full content, summary, and tags."""
-    article = db.query(Article).filter(Article.id == article_id).first()
+    """Retrieve a specific article by ID owned by current_user including full content, summary, and tags."""
+    article = (
+        db.query(Article)
+        .filter(Article.id == article_id, Article.user_id == current_user.id)
+        .first()
+    )
 
     if not article:
         raise HTTPException(
@@ -374,7 +406,11 @@ async def delete_article(
 ):
     """Remove an article owned by current_user from the library."""
     try:
-        article = db.query(Article).filter(Article.id == article_id).first()
+        article = (
+            db.query(Article)
+            .filter(Article.id == article_id, Article.user_id == current_user.id)
+            .first()
+        )
 
         if not article:
             raise HTTPException(
@@ -406,10 +442,14 @@ async def ask_article_ai(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Ask AARC AI a question about an article owned by or accessible to current_user."""
+    """Ask AARC AI a question about an article owned by current_user."""
     clean_content = ""
     try:
-        article = db.query(Article).filter(Article.id == article_id).first()
+        article = (
+            db.query(Article)
+            .filter(Article.id == article_id, Article.user_id == current_user.id)
+            .first()
+        )
 
         if not article:
             raise HTTPException(
@@ -438,7 +478,7 @@ async def ask_article_ai(
             article_content=clean_content,
         )
     except Exception as e:
-        print(f"ask_article_ai route exception: {e}")
+        logger.exception("ask_article_ai route exception for article_id=%s: %s", article_id, e)
         if is_token_or_rate_limit_error(e):
             answer = TOKEN_LIMIT_FALLBACK
         else:
@@ -457,9 +497,13 @@ async def summarize_article_passage(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Summarize a specific highlighted text passage from an article accessible to current_user using Groq LLM."""
+    """Summarize a specific highlighted text passage from an article owned by current_user using Groq LLM."""
     try:
-        article = db.query(Article).filter(Article.id == article_id).first()
+        article = (
+            db.query(Article)
+            .filter(Article.id == article_id, Article.user_id == current_user.id)
+            .first()
+        )
 
         if not article:
             raise HTTPException(
@@ -482,7 +526,7 @@ async def summarize_article_passage(
     try:
         summary_text = summarize_passage(context=body.context)
     except Exception as e:
-        print(f"summarize_article_passage route exception: {e}")
+        logger.exception("summarize_article_passage route exception for article_id=%s: %s", article_id, e)
         if is_token_or_rate_limit_error(e):
             summary_text = TOKEN_LIMIT_FALLBACK
         else:

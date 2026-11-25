@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, FileText, PlayCircle, X, Clock, Loader2 } from 'lucide-react';
 import { searchArticles } from '@/lib/api';
@@ -25,75 +24,105 @@ export default function CommandPalette() {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isOpenRef = useRef(false);
   const router = useRouter();
+
+  const closePalette = useCallback(() => {
+    isOpenRef.current = false;
+    setIsOpen(false);
+    setQuery('');
+    setResults([]);
+    setLoading(false);
+  }, []);
+
+  const openPalette = useCallback(() => {
+    isOpenRef.current = true;
+    setIsOpen(true);
+  }, []);
 
   // Listen for Ctrl+K, Cmd+K, and Escape keys
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
-        setIsOpen((prev) => !prev);
+        if (isOpenRef.current) {
+          closePalette();
+        } else {
+          openPalette();
+        }
       } else if (e.key === 'Escape') {
-        setIsOpen(false);
+        closePalette();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [closePalette, openPalette]);
 
   // Listen for custom trigger event from anywhere (e.g. sidebar button)
   useEffect(() => {
     const handleCustomOpen = () => {
-      setIsOpen(true);
+      openPalette();
     };
 
     window.addEventListener('open-command-palette', handleCustomOpen);
     return () => window.removeEventListener('open-command-palette', handleCustomOpen);
-  }, []);
+  }, [openPalette]);
 
   // Focus input on open
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    } else {
-      setQuery('');
-      setResults([]);
-    }
+    if (!isOpen) return;
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(focusTimer);
   }, [isOpen]);
 
   // Debounced fetch search results when query changes
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
+    if (!trimmed) return;
 
-    setLoading(true);
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         const data = await searchArticles(trimmed);
-        setResults(Array.isArray(data) ? data : []);
+        if (!cancelled) {
+          setResults(Array.isArray(data) ? data : []);
+        }
       } catch (err) {
         console.error('CommandPalette search error:', err);
-        setResults([]);
+        if (!cancelled) {
+          setResults([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [query]);
+
+  const handleQueryChange = (value: string) => {
+    setQuery(value);
+    if (!value.trim()) {
+      setResults([]);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
 
   if (!isOpen) return null;
 
   return (
     <div
-      onClick={() => setIsOpen(false)}
+      onClick={closePalette}
       className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-sm animate-fadeIn"
     >
       <div
@@ -107,7 +136,7 @@ export default function CommandPalette() {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Search your library..."
             className="w-full bg-transparent text-foreground placeholder-foreground/40 text-sm focus:outline-none"
           />
@@ -115,7 +144,7 @@ export default function CommandPalette() {
           {query && !loading && (
             <button
               type="button"
-              onClick={() => setQuery('')}
+              onClick={() => handleQueryChange('')}
               className="p-1 hover:bg-foreground/5 rounded text-foreground/40 hover:text-foreground cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -130,7 +159,7 @@ export default function CommandPalette() {
         <div className="max-h-80 overflow-y-auto p-2 divide-y divide-foreground/5">
           {query.trim() && !loading && results.length === 0 && (
             <div className="p-8 text-center text-foreground/40 text-xs">
-              No matching articles or videos found for "{query}".
+              No matching articles or videos found for &ldquo;{query}&rdquo;.
             </div>
           )}
 
@@ -147,7 +176,7 @@ export default function CommandPalette() {
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  setIsOpen(false);
+                  closePalette();
                   router.push(`/article/${item.id}`);
                 }}
                 className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-foreground/5 transition-colors text-left group cursor-pointer"

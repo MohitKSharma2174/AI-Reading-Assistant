@@ -3,31 +3,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import re
 from fastapi import FastAPI, Request, Query, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, cast, String as SqlString
-from typing import List, Optional
-from youtube_transcript_api import YouTubeTranscriptApi
-from groq import Groq
+from typing import List
 
-from api.routes.articles import router as articles_router, extract_video_id, ingest_article
+from api.routes.articles import router as articles_router, ingest_article, search_articles_route
 from api.routes.highlights import router as highlights_router
 from api.routes.auth import router as auth_router
 from api.routes.ai import router as ai_router
 from api.routes.vocabulary import router as vocabulary_router
 
 from core.database import engine, Base, get_db
-from core.deps import get_current_user, get_optional_current_user
-from models.schema import User, Article, Summary
+from core.deps import get_current_user
+from models.schema import User
 from models.schemas import SearchResultResponse, ArticleIngestResponse
 import models.schema
-
-# Initialize Groq client
-groq_api_key = os.getenv("GROQ_API_KEY")
-groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 # Automatically create tables for all registered models on startup / reload
 Base.metadata.create_all(bind=engine)
@@ -121,38 +113,10 @@ app.post("/api/v1/ingest", response_model=ArticleIngestResponse, status_code=sta
 async def search_articles_endpoint(
     q: str = Query("", description="Search query string"),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Global search across title, clean content, and AI summary bullet points."""
-    term = q.strip()
-    if not term:
-        return []
-
-    search_pattern = f"%{term}%"
-    query = (
-        db.query(Article)
-        .outerjoin(Summary, Article.id == Summary.article_id)
-        .filter(
-            or_(
-                Article.title.ilike(search_pattern),
-                Article.clean_content.ilike(search_pattern),
-                cast(Summary.bullet_points, SqlString).ilike(search_pattern)
-            )
-        )
-        .order_by(Article.created_at.desc())
-        .limit(20)
-    )
-
-    results = query.all()
-    return [
-        SearchResultResponse(
-            id=a.id,
-            title=a.title,
-            media_type=getattr(a, "media_type", "article") or "article",
-            reading_time=a.reading_time
-        )
-        for a in results
-    ]
+    """Global search across current_user's article titles, clean content, and AI summary bullet points."""
+    return await search_articles_route(q=q, db=db, current_user=current_user)
 
 @app.get("/")
 async def root():

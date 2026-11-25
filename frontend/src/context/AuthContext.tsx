@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const u = await getCurrentUser();
         setUser(u);
         setIsAuthenticated(true);
-      } catch (_) {
+      } catch {
         removeToken();
         setUser(null);
         setIsAuthenticated(false);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const u = await getCurrentUser();
       setUser(u);
       setIsAuthenticated(true);
-    } catch (_) {
+    } catch {
       // Fallback user object if /me fails
       const fallbackUser: User = {
         id: 1,

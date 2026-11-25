@@ -4,20 +4,17 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  BookOpen, Library, Plus, BookMarked, User as UserIcon, LogOut,
-  Sun, Moon, Eye, BookText, Trash2, RefreshCw, AlertCircle, Search,
+  BookText, Trash2, RefreshCw, AlertCircle, Search,
   Sparkles, Bookmark, ArrowRight, X, Globe, BarChart2
 } from 'lucide-react';
 import { getVocabulary, deleteVocabulary, VocabularyItem } from '../../lib/api';
-import { useTheme } from '../../lib/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import UrlInputBar from '../../components/UrlInputBar';
 import Sidebar from '../../components/Sidebar';
 
 export default function VocabularyPage() {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [loading, setLoading] = useState(true);

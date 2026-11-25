@@ -79,8 +79,9 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json([], { status: 200 });
-  } catch (error: any) {
-    return NextResponse.json({ detail: error?.message || 'Search proxy error' }, { status: 500 });
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : 'Search proxy error';
+    return NextResponse.json({ detail }, { status: 500 });
   }
 }
 

@@ -28,17 +28,18 @@ export default function AudioPlayer({
   const currentCharIndexRef = useRef<number>(0);
   const currentUtteranceOffsetRef = useRef<number>(0);
   const isSwitchingRateRef = useRef<boolean>(false);
+  const rateSwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Keep references to latest callbacks so effects/handlers never trigger render cascades
   const onHighlightRef = useRef(onHighlight);
   const onPlayingChangeRef = useRef(onPlayingChange);
   const playbackRateRef = useRef<SpeedOption>(playbackRate);
-  playbackRateRef.current = playbackRate;
 
   useEffect(() => {
     onHighlightRef.current = onHighlight;
     onPlayingChangeRef.current = onPlayingChange;
+    playbackRateRef.current = playbackRate;
   });
 
   // Close speed menu when clicking outside
@@ -59,6 +60,10 @@ export default function AudioPlayer({
   // Stop audio ONLY when component unmounts (e.g., navigating away from article)
   useEffect(() => {
     return () => {
+      if (rateSwitchTimeoutRef.current) {
+        clearTimeout(rateSwitchTimeoutRef.current);
+        rateSwitchTimeoutRef.current = null;
+      }
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         onHighlightRef.current?.(-1, 0);
@@ -189,8 +194,13 @@ export default function AudioPlayer({
       isSwitchingRateRef.current = true;
       synth.cancel();
 
+      if (rateSwitchTimeoutRef.current) {
+        clearTimeout(rateSwitchTimeoutRef.current);
+      }
+
       // Small tick to ensure browser speech engine flushes cancellation before queueing new utterance
-      setTimeout(() => {
+      rateSwitchTimeoutRef.current = setTimeout(() => {
+        rateSwitchTimeoutRef.current = null;
         isSwitchingRateRef.current = false;
         startSpeech(currentCharIndexRef.current, newRate);
       }, 30);
@@ -198,13 +208,6 @@ export default function AudioPlayer({
       // If paused, prepare next start from the current position with new rate
       synth.cancel();
     }
-  };
-
-  // Cycle speed to next option
-  const cycleSpeed = () => {
-    const currentIndex = SPEED_OPTIONS.indexOf(playbackRate);
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % SPEED_OPTIONS.length;
-    applySpeed(SPEED_OPTIONS[nextIndex]);
   };
 
   return (

@@ -81,6 +81,10 @@ export interface Article {
   already_existed?: boolean;
 }
 
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : '';
+}
+
 /* AUTH API CALLS */
 
 export async function signup(email: string, password: string): Promise<User> {
@@ -115,11 +119,12 @@ export async function signup(email: string, password: string): Promise<User> {
       if (response.status !== 404) {
         lastErrorDetail = detail;
       }
-    } catch (err: any) {
-      if (err.message && (err.message.includes('exists') || err.message.includes('characters') || err.message.includes('cannot be empty'))) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && (msg.includes('exists') || msg.includes('characters') || msg.includes('cannot be empty'))) {
         throw err;
       }
-      lastErrorDetail = err.message || lastErrorDetail;
+      lastErrorDetail = msg || lastErrorDetail;
       continue;
     }
   }
@@ -168,11 +173,12 @@ export async function login(email: string, password: string): Promise<{ access_t
       if (response.status !== 404) {
         lastErrorDetail = detail;
       }
-    } catch (err: any) {
-      if (err.message && (err.message.includes('Incorrect') || err.message.includes('password') || err.message.includes('required'))) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && (msg.includes('Incorrect') || msg.includes('password') || msg.includes('required'))) {
         throw err;
       }
-      lastErrorDetail = err.message || lastErrorDetail;
+      lastErrorDetail = msg || lastErrorDetail;
       continue;
     }
   }
@@ -199,8 +205,9 @@ export async function getCurrentUser(): Promise<User> {
       if (response.status === 401 || response.status === 403) {
         throw new Error('Failed to authenticate session');
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Failed to authenticate session')) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && msg.includes('Failed to authenticate session')) {
         throw err;
       }
       continue;
@@ -472,10 +479,18 @@ export async function explainText(selectedText: string): Promise<ExplainTextResp
         detail = parsed.detail || '';
       } catch {}
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(detail || 'Authentication required to explain text.');
+      }
+
       if (response.status !== 404) {
         lastErrorDetail = detail || errText;
       }
-    } catch {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && msg.includes('Authentication required')) {
+        throw err;
+      }
       // Network error or fetch failed, try next candidate
       continue;
     }
@@ -575,8 +590,9 @@ export const saveVocabulary = async (word: string, definition: string): Promise<
       if (response.status !== 404) {
         lastErrorDetail = detail || errText;
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Authentication required')) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && msg.includes('Authentication required')) {
         throw err;
       }
       continue;
@@ -617,8 +633,9 @@ export const getVocabulary = async (): Promise<VocabularyItem[]> => {
       if (response.status !== 404) {
         lastErrorDetail = detail || errText;
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Authentication required')) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && msg.includes('Authentication required')) {
         throw err;
       }
       continue;
@@ -659,8 +676,9 @@ export const deleteVocabulary = async (id: number): Promise<{ message: string; i
       if (response.status !== 404) {
         lastErrorDetail = detail || errText;
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Authentication required')) {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg && msg.includes('Authentication required')) {
         throw err;
       }
       continue;
