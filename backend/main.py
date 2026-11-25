@@ -51,22 +51,24 @@ app = FastAPI(
     version="0.2.0"
 )
 
-# CORS middleware configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+def _build_allowed_origins() -> List[str]:
+    origins: List[str] = [
+        "https://ai-reading-assistant-rust.vercel.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    ]
+    for env_name in ("CORS_ORIGINS", "ALLOWED_ORIGINS", "FRONTEND_URL"):
+        raw_value = os.getenv(env_name, "")
+        for item in raw_value.split(","):
+            cleaned = item.strip().rstrip("/")
+            if cleaned and cleaned != "*" and cleaned not in origins:
+                origins.append(cleaned)
+    return origins
+
 
 # Middleware to prevent database locks and leaks during error states
 @app.middleware("http")
@@ -79,6 +81,17 @@ async def db_lock_prevention_middleware(request: Request, call_next):
             status_code=500,
             content={"detail": "Internal server error occurred."}
         )
+
+
+# Add CORSMiddleware last so it is the outermost middleware handling OPTIONS preflights first
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_build_allowed_origins(),
+    allow_origin_regex=r"^https://ai-reading-assistant.*\.vercel\.app$",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+)
 
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1")
